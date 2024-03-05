@@ -109,7 +109,7 @@ Python 3.0+ (Post data process)
      Please refer ./1_RH_BIT_FLIP/troubleshoot/README.md
 
 
-# 2. Reproducing "Performance evaluation:.
+# 2. Reproducing "Performance evaluation".
    
 
 
