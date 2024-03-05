@@ -24,7 +24,7 @@ Python 3.0+ (Post data process)
 
 1) Allocate N * 1GB hugepages on boot time. (e.g., 4 * 1GB)
 
-   1. Update grub file
+   - Update grub file
    ```  
    $ sudo vi /etc/default/grub
    ```
@@ -37,7 +37,7 @@ Python 3.0+ (Post data process)
    $ sudo update-grub
    ```
 
-   2. Mount hugetlbfs
+   - Mount hugetlbfs
 
    ```  
    $ sudo vi /etc/fstab
@@ -95,7 +95,7 @@ Python 3.0+ (Post data process)
 5) Trouble shooting.
 
    - System Crash by UE.
-   - 
+    
      When Uncorrectable Error is generated, system will be crashed.
      For monitoring the UEs, disable ecc.
      
