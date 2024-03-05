@@ -50,6 +50,8 @@ This repository contains artifacts and workflows for reproducing the experiments
   insert
 
   GRUB_DEFAULT= "Advanced options for Ubuntu>Ubuntu, with Linux 5.4.1-base"
+
+  $ sudo update-grub
   ```
 
   - update CoF patched kernel version
@@ -59,4 +61,6 @@ This repository contains artifacts and workflows for reproducing the experiments
   insert
 
   GRUB_DEFAULT= "Advanced options for Ubuntu>Ubuntu, with Linux 5.4.1-mig+"
+
+  $ sudo update-grub
   ```   
