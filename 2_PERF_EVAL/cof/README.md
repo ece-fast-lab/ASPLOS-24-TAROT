@@ -16,6 +16,10 @@ This repository contains artifacts and workflows for reproducing the experiments
 
   To enable network, use ./cof_kernel_network/.config in the Step 3 (Copy over the kernel config).
 
+  ```
+  cof_kernel/.config
+  ```
+
   Note that we succesfully compiled "CoF" in the Ubuntu 20.04.6 LTS.
 
 # 2. Base kernel installation.
