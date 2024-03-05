@@ -89,7 +89,7 @@ Python 3.0+ (Post data process)
 
 4) Post data processing.
 
-   We provide python code for post data processing.
+   We provide python code and example result files for post data processing.
    Refer "./1_RH_BIT_FLIP/POST_PROCESSING/README.md"
 
 5) Trouble shooting.
