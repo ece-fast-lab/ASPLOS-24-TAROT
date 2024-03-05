@@ -66,8 +66,24 @@ Python 3.0+ (Post data process)
    https://github.com/comsec-group/blacksmith
    (Patrick Jattke et al. "BLACKSMITH: Scalable Rowhammering in the Frequency Domain".)
 
+   - update RH attack code
+     
    ```  
    $ git clone https://github.com/comsec-group/blacksmith.git
-   $
+   $ cd blacksmith
+   $ git apply ../1_RH_BIT_FLIP/RH_ATTACK_PATCH/TAROT_mod.patch
+   ```
+
+   - run RH attack program
+     
+   ```  
+   $ mkdir build
+   $ cd build
+   $ cmake ..
+   $ make -j$(nproc)
+   For 1 rank DIMM
+   $ sudo ./blacksmith --dimm-id 1 --runtime-limit 259200000 --ranks 1 -a 150
+   For 2 rank DIMM
+   $ sudo ./blacksmith --dimm-id 1 --runtime-limit 259200000 --ranks 2 -a 150
    ```
 
