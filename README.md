@@ -24,7 +24,7 @@ Python 3.0+ (Post data process)
 
 1) Allocate N * 1GB hugepages on boot time. (e.g., 4 * 1GB)
 
-   1. Update grub file
+   - Update grub file
    ```  
    $ sudo vi /etc/default/grub
    ```
@@ -37,7 +37,7 @@ Python 3.0+ (Post data process)
    $ sudo update-grub
    ```
 
-   2. Mount hugetlbfs
+   - Mount hugetlbfs
 
    ```  
    $ sudo vi /etc/fstab
@@ -66,8 +66,53 @@ Python 3.0+ (Post data process)
    https://github.com/comsec-group/blacksmith
    (Patrick Jattke et al. "BLACKSMITH: Scalable Rowhammering in the Frequency Domain".)
 
+   - update RH attack code
+     
    ```  
    $ git clone https://github.com/comsec-group/blacksmith.git
-   $
+   $ cd blacksmith
+   $ git apply ../1_RH_BIT_FLIP/RH_ATTACK_PATCH/TAROT_mod.patch
    ```
 
+   - run RH attack program
+     
+   ```  
+   $ mkdir build
+   $ cd build
+   $ cmake ..
+   $ make -j$(nproc)
+   // For 1 rank DIMM
+   $ sudo ./blacksmith --dimm-id 1 --runtime-limit 259200000 --ranks 1 -a 150
+   // For 2 rank DIMM
+   $ sudo ./blacksmith --dimm-id 1 --runtime-limit 259200000 --ranks 2 -a 150
+   ```
+
+4) Post data processing.
+
+   We provide python code and example result files for post data processing.
+   Refer "./1_RH_BIT_FLIP/POST_PROCESSING/README.md"
+
+5) Trouble shooting.
+
+   - System Crash by UE.
+    
+     When Uncorrectable Error is generated, system will be crashed.
+     For monitoring the UEs, disable ecc.
+     
+     1) ECC off on the bios menu.
+     2) ECC off by modifying MSR register using PCM (please refer ./1_RH_BIT_FLIP/troubleshoot/README.md).
+
+   - No RH-error from RH attack program.
+    
+     Since latest DRAMs have in-dram mitigation logic, it is difficult to reproduce bit-flip.
+     Modifying REFRESH rate of DRAM helps to generate bit-flip errors.
+     Please refer ./1_RH_BIT_FLIP/troubleshoot/README.md
+
+
+# 2. Reproducing "Performance evaluation".
+   
+
+
+
+   
+   
