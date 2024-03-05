@@ -81,9 +81,9 @@ Python 3.0+ (Post data process)
    $ cd build
    $ cmake ..
    $ make -j$(nproc)
-   For 1 rank DIMM
+   // For 1 rank DIMM
    $ sudo ./blacksmith --dimm-id 1 --runtime-limit 259200000 --ranks 1 -a 150
-   For 2 rank DIMM
+   // For 2 rank DIMM
    $ sudo ./blacksmith --dimm-id 1 --runtime-limit 259200000 --ranks 2 -a 150
    ```
 
