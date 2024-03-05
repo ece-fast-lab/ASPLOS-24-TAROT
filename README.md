@@ -87,3 +87,16 @@ Python 3.0+ (Post data process)
    $ sudo ./blacksmith --dimm-id 1 --runtime-limit 259200000 --ranks 2 -a 150
    ```
 
+4) Post data processing.
+
+   We provide python code for post data processing.
+   Refer "./1_RH_BIT_FLIP/POST_PROCESSING/README.md"
+
+5) Trouble shooting.
+
+   
+
+
+
+   
+   
