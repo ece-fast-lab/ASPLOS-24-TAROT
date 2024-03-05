@@ -3,6 +3,7 @@ This repository contains artifacts and workflows for reproducing the experiments
 
 # Contents
 Modifying MSR for double Refresh Rate of DRAM.
+We tested on Haswell, Broadwell CPU.
 
 # Compile PCM by Intel(R)
 (Intel, "Intel(R) Performance Counter Monitor (Intel(R) PCM)", https://github.com/intel/pcm )
@@ -21,7 +22,7 @@ Modifying MSR for double Refresh Rate of DRAM.
    $ cmake --build .
    ```
 
-  Check DRAM refresh timing parameter register (Below e.g., is tested on Haswll, Broadwell CPU)
+  Check DRAM refresh timing parameter register (Below e.g., is tested on Haswell, Broadwell CPU)
 
   ```  
    $ lspci | grep "Thermal Control"
