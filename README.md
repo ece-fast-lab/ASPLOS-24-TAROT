@@ -22,3 +22,8 @@ Python 3.0+ (Post data process)
 
 # 1. Reproducing "RH-induced Bit Flips".
 
+1) Reverse-engineering Physical Address to DRAM Address Mapping
+   We use "DRAMA" to reverse engineering the Physical Address to DRAM Address Mapping.
+   https://github.com/IAIK/drama.git
+
+   - We provide the mapping function for Haswell and Broadwell server in the modified code of row hammer attacks(
