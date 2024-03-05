@@ -6,7 +6,7 @@ This repository contains artifacts and workflows for reproducing the experiments
   Andrea Di Dio et al., 2023, "Copy-on-Flip: Hardening ECC Memory Against Rowhammer Attacks", In Proceedings of the Network and Distributed System Security (NDSS) Symposium.
   https://github.com/vusec/Copy-on-Flip
 
-2. Base kernel installation. To compare performance overhead for CoF and TAROT, we strongly recommend to install same kernel environmet with CoF.
+2. Base kernel installation. To compare performance overhead for CoF and TAROT, we strongly recommend to install same kernel version with CoF.
    This kernel version is using for measuring performance overhead of double REFRESH, ANVIL, C-TAROT and S-TAROT.
 
 3. Updating kernel version.
