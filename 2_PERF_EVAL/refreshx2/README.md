@@ -47,7 +47,7 @@ Modifying MSR for double Refresh Rate of DRAM.
   group : 0 , BUS : 0xff , Device : 0x17 , Function 0x1 , Offset: 0x214
   ```
 
-  You can find the detailed register addresses in [the Intel(R) uncore register data sheet.](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/xeon-e5-1600-2600-vol-2-datasheet.pdf)https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/xeon-e5-1600-2600-vol-2-datasheet.pdf
+  You can find the detailed register addresses in [the Intel(R) uncore register data sheet.](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/xeon-e5-1600-2600-vol-2-datasheet.pdf)
 
   
   
