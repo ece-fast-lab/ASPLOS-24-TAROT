@@ -1,0 +1,1443 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c8bb512..d85769d 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.11 FATAL_ERROR)
+ project(blacksmith VERSION 0.0.1 LANGUAGES CXX)
+ 
+ # === OPTIONS ==================================================================
++FIND_PACKAGE(OpenMP)
++set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
++set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
+ 
+ set(
+         BLACKSMITH_ENABLE_JSON
+@@ -93,6 +96,7 @@ target_compile_options(
+         -Wextra
+         -Wno-unused-function
+         -Wno-format-security
++	-fopenmp
+ )
+ 
+ if (BLACKSMITH_ENABLE_JSON)
+diff --git a/include/Blacksmith.hpp b/include/Blacksmith.hpp
+index e044299..2b68479 100644
+--- a/include/Blacksmith.hpp
++++ b/include/Blacksmith.hpp
+@@ -12,7 +12,7 @@ struct ProgramArguments {
+   // the number of ranks of the DIMM to hammer
+   int num_ranks = 0;
+   // no. of activations we can do within a refresh interval
+-  size_t acts_per_trefi = 0;
++  size_t acts_per_ref = 0;
+   // path to JSON file to load
+   std::string load_json_filename;
+   // the IDs of the patterns to be loaded from a given JSON file
+@@ -28,7 +28,6 @@ struct ProgramArguments {
+   // these two parameters define the default program mode: do fuzzing and synchronize with REFRESH
+   bool do_fuzzing = true;
+   bool use_synchronization = true;
+-  bool fixed_acts_per_ref = false;
+ };
+ 
+ extern ProgramArguments program_args;
+diff --git a/include/Forges/FuzzyHammerer.hpp b/include/Forges/FuzzyHammerer.hpp
+index 40e340f..9af4189 100644
+--- a/include/Forges/FuzzyHammerer.hpp
++++ b/include/Forges/FuzzyHammerer.hpp
+@@ -33,6 +33,11 @@ class FuzzyHammerer {
+                                                 unsigned long runtime_limit, size_t probes_per_pattern,
+                                                 bool sweep_best_pattern);
+ 
++  static void generate_pattern_for_ARM(int acts,
++                                       int *rows_to_access,
++                                       int max_accesses,
++                                       size_t probes_per_pattern);
++
+   static void test_location_dependence(ReplayingHammerer &rh, HammeringPattern &pattern);
+ 
+   static void probe_mapping_and_scan(PatternAddressMapper &mapper, Memory &memory,
+@@ -40,8 +45,6 @@ class FuzzyHammerer {
+ 
+   static void log_overall_statistics(size_t cur_round, const std::string &best_mapping_id,
+                                      size_t best_mapping_num_bitflips, size_t num_effective_patterns);
+-
+-  static void generate_pattern_for_ARM(int acts, int *rows_to_access, int max_accesses, const size_t probes_per_pattern);
+ };
+ 
+ #endif //BLACKSMITH_SRC_FORGES_FUZZYHAMMERER_HPP_
+diff --git a/include/GlobalDefines.hpp b/include/GlobalDefines.hpp
+index a66e797..237eb68 100644
+--- a/include/GlobalDefines.hpp
++++ b/include/GlobalDefines.hpp
+@@ -47,14 +47,15 @@ uint64_t static inline GB(uint64_t value) {
+ #define HAMMER_ROUNDS 1000000
+ 
+ // threshold to distinguish between row buffer miss (t > THRESH) and row buffer hit (t < THRESH)
+-#define THRESH 495  // worked best on DIMM 6
+-//#define THRESH 430  // worked best on DIMM 18
++//#define THRESH 495  // worked best on DIMM 6
++#define THRESH 430  // worked best on DIMM 18
++//#define THRESH 340  // worked best on DIMM 18
+ 
+ // number of conflicting addresses to be determined for each bank
+ #define NUM_TARGETS 10
+ 
+ // maximum number of aggressor rows
+-#define MAX_ROWS 30
++#define MAX_ROWS 20
+ 
+ // number of banks in the system
+ #define NUM_BANKS 16
+@@ -66,6 +67,6 @@ uint64_t static inline GB(uint64_t value) {
+ #define CHANNEL 1
+ 
+ // number of bytes to be allocated
+-#define MEM_SIZE (GB(1))
++#define MEM_SIZE (GB(2))
+ 
+ #endif /* GLOBAL_DEFINES */
+diff --git a/include/Memory/DRAMAddr.hpp b/include/Memory/DRAMAddr.hpp
+index 11d94b2..c60106b 100644
+--- a/include/Memory/DRAMAddr.hpp
++++ b/include/Memory/DRAMAddr.hpp
+@@ -79,7 +79,7 @@ class DRAMAddr {
+ #ifdef ENABLE_JSON
+   static nlohmann::json get_memcfg_json();
+ #endif
+-
++  static uint64_t get_row_increment();
+   static void initialize_configs();
+ };
+ 
+diff --git a/include/Memory/DramAnalyzer.hpp b/include/Memory/DramAnalyzer.hpp
+index 48e048a..571c75b 100644
+--- a/include/Memory/DramAnalyzer.hpp
++++ b/include/Memory/DramAnalyzer.hpp
+@@ -55,7 +55,9 @@ class DramAnalyzer {
+   void load_known_functions(int num_ranks);
+ 
+   /// Determine the number of possible activations within a refresh interval.
+-  size_t count_acts_per_trefi();
++  //size_t count_acts_per_trefi();
++  /// Determine the number of possible total activations to an aggressor pair within a refresh interval.
++  size_t count_acts_per_ref();
+ };
+ 
+ #endif /* DRAMANALYZER */
+diff --git a/include/Memory/Memory.hpp b/include/Memory/Memory.hpp
+index 37d4e18..3292486 100644
+--- a/include/Memory/Memory.hpp
++++ b/include/Memory/Memory.hpp
+@@ -14,7 +14,7 @@
+ #include "Fuzzer/PatternAddressMapper.hpp"
+ 
+ enum class DATA_PATTERN : char {
+-  ZEROES, ONES, RANDOM
++  STRIPE_0F, STRIPE_F0, CHECK_5A, CHECK_A5, CHECK_69, CHECK_96, ZEROES, ONES, RANDOM
+ };
+ 
+ class Memory {
+@@ -22,6 +22,7 @@ class Memory {
+   /// the starting address of the allocated memory area
+   /// this is a fixed value as the assumption is that all memory cells are equally vulnerable
+   volatile char *start_address = (volatile char *) 0x2000000000;
++//  volatile char *start_address = (volatile char *) NULL;
+ 
+   // the mount point of the huge pages filesystem
+   const std::string hugetlbfs_mountpoint = "/mnt/huge/buff";
+@@ -35,6 +36,11 @@ class Memory {
+   size_t check_memory_internal(PatternAddressMapper &mapping, const volatile char *start,
+                                const volatile char *end, bool reproducibility_mode, bool verbose);
+ 
++  size_t check_memory_internal(PatternAddressMapper &mapping, const volatile char *start,
++                               const volatile char *end, bool reproducibility_mode, bool verbose, size_t row_inc, size_t distance, size_t bank, size_t agg_size);
++
++  size_t check_memory_internal(PatternAddressMapper &mapping, const volatile char *start,
++                               bool reproducibility_mode, bool verbose, size_t row_inc, size_t distance, size_t bank, size_t agg_size, size_t even);                               
+  public:
+ 
+   // the flipped bits detected during the last call to check_memory
+@@ -50,6 +56,10 @@ class Memory {
+ 
+   size_t check_memory(const volatile char *start, const volatile char *end);
+ 
++  size_t check_memory(std::vector<volatile char *> &aggressors, size_t row_inc, size_t distance, size_t bank);
++
++  size_t check_victim_memory(std::vector<volatile char *> &victim, size_t row_inc, size_t distance, size_t bank, size_t even);  
++
+   size_t check_memory(PatternAddressMapper &mapping, bool reproducibility_mode, bool verbose);
+ 
+   [[nodiscard]] volatile char *get_starting_address() const;
+diff --git a/include/Utilities/AsmPrimitives.hpp b/include/Utilities/AsmPrimitives.hpp
+index 7001200..489c048 100644
+--- a/include/Utilities/AsmPrimitives.hpp
++++ b/include/Utilities/AsmPrimitives.hpp
+@@ -24,7 +24,7 @@
+   asm volatile("clflush (%0)\n" ::"r"(p)
+                : "memory");
+ #else
+-  asm volatile("clflushopt (%0)\n"::"r"(p)
++  asm volatile("clflush (%0)\n"::"r"(p)
+   : "memory");
+ #
+ 
+diff --git a/include/Utilities/Logger.hpp b/include/Utilities/Logger.hpp
+index 317e81a..145769b 100644
+--- a/include/Utilities/Logger.hpp
++++ b/include/Utilities/Logger.hpp
+@@ -47,9 +47,20 @@ class Logger {
+ 
+   static void log_data(const std::string &message, bool newline = true);
+ 
++  static ulong vtop(ulong vaddr);
++  
++  static ulong vtopfn(ulong vaddr);
++
+   static void log_bitflip(volatile char *flipped_address, uint64_t row_no, unsigned char actual_value,
+                           unsigned char expected_value, unsigned long timestamp, bool newline);
+ 
++
++  static void log_bitflip(volatile char *flipped_address, uint64_t row_no, unsigned char actual_value,
++                          unsigned char expected_value, unsigned long timestamp, bool newline, size_t row_inc, size_t distance, size_t bank, size_t agg_size);
++
++  static void log_bitflip(volatile char *flipped_address, uint64_t row_no, uint64_t col_no, unsigned char actual_value,
++                          unsigned char expected_value, unsigned long timestamp, bool newline, size_t row_inc, size_t distance, size_t bank, size_t agg_size);
++
+   static void log_debug(const std::string &message, bool newline = true);
+ 
+   static void log_timestamp();
+diff --git a/src/Blacksmith.cpp b/src/Blacksmith.cpp
+index fb49295..bfa1164 100644
+--- a/src/Blacksmith.cpp
++++ b/src/Blacksmith.cpp
+@@ -41,7 +41,10 @@ int check_cpu() {
+       "i7-8086",
+       "i7-8700",
+       "i7-9700",
+-      "i7-9900"
++      "i7-9900",
++      "E5-2650",
++      "E5-2640",
++      "E5-2670"
+   };
+ 
+   bool cpu_supported = false;
+@@ -89,8 +92,8 @@ int main(int argc, char **argv) {
+   DRAMAddr::initialize(dram_analyzer.get_bank_rank_functions().size(), memory.get_starting_address());
+ 
+   // count the number of possible activations per refresh interval, if not given as program argument
+-  if (program_args.acts_per_trefi==0)
+-    program_args.acts_per_trefi = dram_analyzer.count_acts_per_trefi();
++  if (program_args.acts_per_ref==0)
++    program_args.acts_per_ref = dram_analyzer.count_acts_per_ref()*2;
+ 
+   if (!program_args.load_json_filename.empty()) {
+     ReplayingHammerer replayer(memory);
+@@ -101,12 +104,13 @@ int main(int argc, char **argv) {
+       replayer.replay_patterns(program_args.load_json_filename, program_args.pattern_ids);
+     }
+   } else if (program_args.do_fuzzing && program_args.use_synchronization) {
+-    FuzzyHammerer::n_sided_frequency_based_hammering(dram_analyzer, memory, static_cast<int>(program_args.acts_per_trefi), program_args.runtime_limit,
++    FuzzyHammerer::n_sided_frequency_based_hammering(dram_analyzer, memory, static_cast<int>(program_args.acts_per_ref), program_args.runtime_limit,
+         program_args.num_address_mappings_per_pattern, program_args.sweeping);
+   } else if (!program_args.do_fuzzing) {
+ //    TraditionalHammerer::n_sided_hammer(memory, program_args.acts_per_trefi, program_args.runtime_limit);
+-//    TraditionalHammerer::n_sided_hammer_experiment(memory, program_args.acts_per_trefi);
+-    TraditionalHammerer::n_sided_hammer_experiment_frequencies(memory);
++//    TraditionalHammerer::n_sided_hammer_experiment(memory, program_args.acts_per_ref);
++//    TraditionalHammerer::n_sided_hammer_experiment_frequencies(memory);
++    TraditionalHammerer::n_sided_hammer(memory, program_args.acts_per_ref, program_args.runtime_limit);
+   } else {
+     Logger::log_error("Invalid combination of program control-flow arguments given. "
+                       "Note: Fuzzing is only supported with synchronized hammering.");
+@@ -196,10 +200,8 @@ void handle_args(int argc, char **argv) {
+   program_args.runtime_limit = parsed_args["runtime-limit"].as<unsigned long>(program_args.runtime_limit);
+   Logger::log_debug(format_string("Set --runtime_limit=%ld", program_args.runtime_limit));
+ 
+-  program_args.acts_per_trefi = parsed_args["acts-per-ref"].as<size_t>(program_args.acts_per_trefi);
+-  Logger::log_info(format_string("+++ %d", program_args.acts_per_trefi));
+-  program_args.fixed_acts_per_ref = (program_args.acts_per_trefi != 0);
+-  Logger::log_debug(format_string("Set --acts-per-ref=%d", program_args.acts_per_trefi));
++  program_args.acts_per_ref = parsed_args["acts-per-ref"].as<size_t>(program_args.acts_per_ref);
++  Logger::log_debug(format_string("Set --acts-per-ref=%d", program_args.acts_per_ref));
+ 
+   program_args.num_address_mappings_per_pattern = parsed_args["probes"].as<size_t>(program_args.num_address_mappings_per_pattern);
+   Logger::log_debug(format_string("Set --probes=%d", program_args.num_address_mappings_per_pattern));
+@@ -223,8 +225,10 @@ void handle_args(int argc, char **argv) {
+       program_args.pattern_ids = std::unordered_set<std::string>();
+     }
+   } else {
+-    program_args.do_fuzzing = parsed_args["fuzzing"].as<bool>(true);
+-    const bool default_sync = true;
++    //program_args.do_fuzzing = parsed_args["fuzzing"].as<bool>(true);
++    program_args.do_fuzzing = parsed_args["fuzzing"].as<bool>(false);
++    //const bool default_sync = true;
++    const bool default_sync = false;
+     program_args.use_synchronization = parsed_args.has_option("sync") || default_sync;
+   }
+ }
+diff --git a/src/Forges/FuzzyHammerer.cpp b/src/Forges/FuzzyHammerer.cpp
+index 7d35b37..cd6dc69 100644
+--- a/src/Forges/FuzzyHammerer.cpp
++++ b/src/Forges/FuzzyHammerer.cpp
+@@ -107,10 +107,10 @@ void FuzzyHammerer::n_sided_frequency_based_hammering(DramAnalyzer &dramAnalyzer
+     // dynamically change num acts per tREF after every 100 patterns; this is to avoid that we made a bad choice at the
+     // beginning and then get stuck with that value
+     // if the user provided a fixed num acts per tREF value via the program arguments, then we will not change it
+-    if (cnt_generated_patterns%100==0 && !program_args.fixed_acts_per_ref) {
++    if (cnt_generated_patterns%100==0 && program_args.acts_per_ref != 0) {
+       auto old_nacts = fuzzing_params.get_num_activations_per_t_refi();
+       // repeat measuring the number of possible activations per tREF as it might be that the current value is not optimal
+-      fuzzing_params.set_num_activations_per_t_refi(static_cast<int>(dramAnalyzer.count_acts_per_trefi()));
++      fuzzing_params.set_num_activations_per_t_refi(static_cast<int>(dramAnalyzer.count_acts_per_ref()*2));
+       Logger::log_info(
+           format_string("Recomputed number of ACTs per tREF (old: %d, new: %d).",
+               old_nacts,
+diff --git a/src/Forges/TraditionalHammerer.cpp b/src/Forges/TraditionalHammerer.cpp
+index 3e63fc4..b2cc440 100644
+--- a/src/Forges/TraditionalHammerer.cpp
++++ b/src/Forges/TraditionalHammerer.cpp
+@@ -1,11 +1,13 @@
+ #include "Forges/TraditionalHammerer.hpp"
+-
++#include <omp.h>
+ #include "Utilities/TimeHelper.hpp"
+ #include "Blacksmith.hpp"
++#include <iostream>
+ 
+ /// Performs hammering on given aggressor rows for HAMMER_ROUNDS times.
+ void TraditionalHammerer::hammer(std::vector<volatile char *> &aggressors) {
+-  hammer(aggressors, HAMMER_ROUNDS);
++  //hammer(aggressors, HAMMER_ROUNDS);
++  hammer_flush_early(aggressors, HAMMER_ROUNDS);
+ }
+ 
+ void TraditionalHammerer::hammer(std::vector<volatile char *> &aggressors, size_t reps) {
+@@ -26,7 +28,7 @@ void TraditionalHammerer::hammer_flush_early(std::vector<volatile char *> &aggre
+       (void)*a;
+       clflushopt(a);
+     }
+-    mfence();
++    //mfence();
+   }
+ }
+ 
+@@ -81,7 +83,8 @@ void TraditionalHammerer::hammer_sync(std::vector<volatile char *> &aggressors,
+       after = rdtscp();
+       lfence();
+       // stop if an ACTIVATE was issued
+-      if ((after - before) > 1000) break;
++//      if ((after - before) > 1000) break;
++      if ((after - before) > 780) break;
+     }
+   }
+ }
+@@ -257,30 +260,111 @@ void TraditionalHammerer::hammer_sync(std::vector<volatile char *> &aggressors,
+   std::uniform_int_distribution<size_t> dist(0, std::numeric_limits<size_t>::max());
+ 
+   const auto execution_limit = get_timestamp_sec() + runtime_limit;
++  auto bg_loop_stamp = get_timestamp_sec();
++  size_t even = 1 ;
++  auto bg_looptime = 60;
++  memory.initialize(DATA_PATTERN::STRIPE_F0);
++
++//  DATA_PATTERN pattern = DATA_PATTERN::STRIPE_0F;
++//size_t aggressor_rows_size = MAX_ROWS;  // number of aggressor rows
++
+   while (get_timestamp_sec() < execution_limit) {
+-    size_t aggressor_rows_size = (dist(gen)%(MAX_ROWS - 3)) + 3;  // number of aggressor rows
+-    size_t v = 2;  // distance between aggressors (within a pair)
+-    size_t d = dist(gen)%16;  // distance of each double-sided aggressor pair
+ 
++    if (get_timestamp_sec() > bg_loop_stamp + bg_looptime){
++      if (even%2 == 0){
++        memory.initialize(DATA_PATTERN::STRIPE_F0);
++//        pattern = DATA_PATTERN::STRIPE_F0;
++      } else {
++        memory.initialize(DATA_PATTERN::STRIPE_0F);
++//        pattern = DATA_PATTERN::STRIPE_0F;
++      }
++      bg_loop_stamp = get_timestamp_sec();
++      even += 1;
++      mfence();
++    }
++    
++    //size_t aggressor_rows_size = (dist(gen)%(MAX_ROWS - 3)) + 3;  // number of aggressor rows
++    size_t aggressor_rows_size = 11;  // number of aggressor rows
++    size_t v = 2;  // distance between aggressors (within a pair)
++    //size_t d = dist(gen)%16;  // distance of each double-sided aggressor pair
++    size_t d = 2;  // distance of each double-sided aggressor pair
++	
+     for (size_t ba = 0; ba < 4; ba++) {
+-      DRAMAddr cur_next_addr(ba, dist(gen)%4096, 0);
++      DRAMAddr cur_next_addr(ba, dist(gen)%(4096-d*aggressor_rows_size), 0);
++      //DRAMAddr cur_next_addr(ba, (dist(gen)%10)*2+vic, 0); //3453
++      DRAMAddr victim_addr = cur_next_addr;
+ 
+       std::vector<volatile char *> aggressors;
++      std::vector<volatile char *> victim;
+       std::stringstream ss;
++      ss << "victim row : "<< ba << ", ";
++
++      for (size_t i = 1; i < aggressor_rows_size; i += 2) {
++
++        if (d==2){
++          if (i==1){
++            victim_addr.add_inplace(0, d-2, 0);
++           ss << victim_addr.row << "(pfn 0x" <<  std::hex <<Logger::vtopfn((ulong)(void *) victim_addr.to_virt()) <<std::dec <<")" << " ";
++            victim.push_back((volatile char *) victim_addr.to_virt());
+ 
++          }
++        
++          victim_addr.add_inplace(0, 2, 0);
++          ss << victim_addr.row << "(pfn 0x" <<  std::hex <<Logger::vtopfn((ulong)(void *) victim_addr.to_virt()) <<std::dec <<")" << " ";
++          victim.push_back((volatile char *) victim_addr.to_virt());
++
++          victim_addr.add_inplace(0, 2, 0);
++          ss << victim_addr.row << "(pfn 0x" <<  std::hex <<Logger::vtopfn((ulong)(void *) victim_addr.to_virt()) <<std::dec <<")" << " ";
++          victim.push_back((volatile char *) victim_addr.to_virt());
++        
++        }else{
++          if (i==1){
++            victim_addr.add_inplace(0, d-1, 0);
++            ss << victim_addr.row << "(pfn 0x" <<  std::hex <<Logger::vtopfn((ulong)(void *) victim_addr.to_virt()) <<std::dec <<")" << " ";
++            victim.push_back((volatile char *) victim_addr.to_virt());
++          }else{
++            victim_addr.add_inplace(0, d-2, 0);
++            ss << victim_addr.row << "(pfn 0x" <<  std::hex <<Logger::vtopfn((ulong)(void *) victim_addr.to_virt()) <<std::dec <<")" << " ";
++            victim.push_back((volatile char *) victim_addr.to_virt());
++          }
++        
++        victim_addr.add_inplace(0, 2, 0);
++        ss << victim_addr.row << "(pfn 0x" <<  std::hex <<Logger::vtopfn((ulong)(void *) victim_addr.to_virt()) <<std::dec <<")" << " ";
++        victim.push_back((volatile char *) victim_addr.to_virt());
++
++        victim_addr.add_inplace(0, 2, 0);
++        ss << victim_addr.row << "(pfn 0x" <<  std::hex <<Logger::vtopfn((ulong)(void *) victim_addr.to_virt()) <<std::dec <<")" << " ";
++        victim.push_back((volatile char *) victim_addr.to_virt());
++        }
++      }
++
++      if(aggressor_rows_size%2!=0){
++          victim_addr.add_inplace(0, 2, 0);
++          ss << victim_addr.row << "(pfn 0x" <<  std::hex <<Logger::vtopfn((ulong)(void *) victim_addr.to_virt()) <<std::dec <<")" << " ";
++          victim.push_back((volatile char *) victim_addr.to_virt());
++      }
++      
+       ss << "agg row: ";
+       for (size_t i = 1; i < aggressor_rows_size; i += 2) {
++        
++
++        if (i==1){
++        cur_next_addr.add_inplace(0, d-1, 0);
++        ss << cur_next_addr.row << "(pfn 0x" <<   std::hex <<Logger::vtopfn((ulong)(void *) cur_next_addr.to_virt())<<std::dec <<")" << " ";
++        aggressors.push_back((volatile char *) cur_next_addr.to_virt());
++        } else {
+         cur_next_addr.add_inplace(0, d, 0);
+-        ss << cur_next_addr.row << " ";
++        ss << cur_next_addr.row << "(pfn 0x" <<   std::hex <<Logger::vtopfn((ulong)(void *) cur_next_addr.to_virt())<<std::dec <<")" << " ";
+         aggressors.push_back((volatile char *) cur_next_addr.to_virt());
+-
++        }
+         cur_next_addr.add_inplace(0, v, 0);
+-        ss << cur_next_addr.row << " ";
++        ss << cur_next_addr.row << "(pfn 0x" <<   std::hex <<Logger::vtopfn((ulong)(void *) cur_next_addr.to_virt())<<std::dec <<")" << " ";
+         aggressors.push_back((volatile char *) cur_next_addr.to_virt());
+       }
+ 
+       if ((aggressor_rows_size%2)!=0) {
+-        ss << cur_next_addr.row << " ";
++        cur_next_addr.add_inplace(0, v, 0);
++        ss << cur_next_addr.row << "(pfn 0x" <<   std::hex <<Logger::vtopfn((ulong)(void *) cur_next_addr.to_virt())<<std::dec <<")" << " ";
+         aggressors.push_back((volatile char *) cur_next_addr.to_virt());
+       }
+       Logger::log_data(ss.str());
+@@ -308,7 +392,9 @@ void TraditionalHammerer::hammer_sync(std::vector<volatile char *> &aggressors,
+       }
+ 
+       // check 100 rows before and after for flipped bits
+-      memory.check_memory(aggressors[0], aggressors[aggressors.size() - 1]);
++      //memory.check_memory(aggressors[0], aggressors[aggressors.size() - 1]);
++      memory.check_victim_memory(victim, v, d, ba, even);
++    
+     }
+   }
+ }
+@@ -431,7 +517,7 @@ for (size_t r = 0; r < 10; ++ r) {
+     hammer_flush_early(aggressors, 8192*32);
+ //    hammer(aggressors, 5000000/aggressors.size());
+ //    hammer(aggressors, 8192*32);
+-//    hammer_sync(aggressors, program_args.acts_per_trefi,
++//    hammer_sync(aggressors, program_args.acts_per_ref,
+ //        (volatile char *) dmy2.add(0, 111, 0).to_virt(),
+ //        (volatile char *) dmy2.add(0, 113, 0).to_virt());
+ 
+diff --git a/src/Fuzzer/CodeJitter.cpp b/src/Fuzzer/CodeJitter.cpp
+index fe3ebae..9093e0f 100644
+--- a/src/Fuzzer/CodeJitter.cpp
++++ b/src/Fuzzer/CodeJitter.cpp
+@@ -120,7 +120,8 @@ void CodeJitter::jit_strict(int num_acts_per_trefi,
+   // clflushopt addresses involved in sync
+   for (int idx = 0; idx < NUM_TIMED_ACCESSES; idx++) {
+     a.mov(asmjit::x86::rax, (uint64_t) aggressor_pairs[idx]);
+-    a.clflushopt(asmjit::x86::ptr(asmjit::x86::rax));
++    //a.clflushopt(asmjit::x86::ptr(asmjit::x86::rax));
++    a.clflush(asmjit::x86::ptr(asmjit::x86::rax));
+   }
+   a.mfence();
+ 
+@@ -168,7 +169,8 @@ void CodeJitter::jit_strict(int num_acts_per_trefi,
+       // flush
+       if (flushing==FLUSHING_STRATEGY::LATEST_POSSIBLE) {
+         a.mov(asmjit::x86::rax, cur_addr);
+-        a.clflushopt(asmjit::x86::ptr(asmjit::x86::rax));
++        //a.clflushopt(asmjit::x86::ptr(asmjit::x86::rax));
++        a.clflush(asmjit::x86::ptr(asmjit::x86::rax));
+         accessed_before[cur_addr] = false;
+       }
+       // fence to ensure flushing finished and defined order of aggressors is guaranteed
+@@ -188,7 +190,8 @@ void CodeJitter::jit_strict(int num_acts_per_trefi,
+     // flush
+     if (flushing==FLUSHING_STRATEGY::EARLIEST_POSSIBLE) {
+       a.mov(asmjit::x86::rax, cur_addr);
+-      a.clflushopt(asmjit::x86::ptr(asmjit::x86::rax));
++      //a.clflushopt(asmjit::x86::ptr(asmjit::x86::rax));
++      a.clflush(asmjit::x86::ptr(asmjit::x86::rax));
+     }
+     if (sync_each_ref
+         && ((cnt_total_activations%num_acts_per_trefi)==0)) {
+@@ -244,7 +247,8 @@ void CodeJitter::sync_ref(const std::vector<volatile char *> &aggressor_pairs, a
+   for (auto agg : aggressor_pairs) {
+     // flush
+     assembler.mov(asmjit::x86::rax, (uint64_t) agg);
+-    assembler.clflushopt(asmjit::x86::ptr(asmjit::x86::rax));
++    //assembler.clflushopt(asmjit::x86::ptr(asmjit::x86::rax));
++    assembler.clflush(asmjit::x86::ptr(asmjit::x86::rax));
+ 
+     // access
+     assembler.mov(asmjit::x86::rax, (uint64_t) agg);
+diff --git a/src/Memory/DRAMAddr.cpp b/src/Memory/DRAMAddr.cpp
+index 774af75..1e85154 100644
+--- a/src/Memory/DRAMAddr.cpp
++++ b/src/Memory/DRAMAddr.cpp
+@@ -127,159 +127,162 @@ nlohmann::json DRAMAddr::get_memcfg_json() {
+ 
+ void DRAMAddr::initialize_configs() {
+   struct MemConfiguration single_rank = {
+-      .IDENTIFIER = (CHANS(1UL) | DIMMS(1UL) | RANKS(1UL) | BANKS(16UL)),
+-      .BK_SHIFT =  26,
+-      .BK_MASK =  (0b1111),
+-      .ROW_SHIFT =  0,
+-      .ROW_MASK =  (0b1111111111111),
+-      .COL_SHIFT =  13,
+-      .COL_MASK =  (0b1111111111111),
+-      /* maps a virtual addr -> DRAM addr: bank (4 bits) | col (13 bits) | row (13 bits) */
+-      .DRAM_MTX =  {
+-          0b000000000000000010000001000000, /* 0x02040 bank b3 = addr b6 + b13 */
+-          0b000000000000100100000000000000, /* 0x24000 bank b2 = addr b14 + b17 */
+-          0b000000000001001000000000000000, /* 0x48000 bank b1 = addr b15 + b18 */
+-          0b000000000010010000000000000000, /* 0x90000 bank b0 = addr b16 + b19 */
+-          0b000000000000000010000000000000, /* col b12 = addr b13 */
+-          0b000000000000000001000000000000, /* col b11 = addr b12 */
+-          0b000000000000000000100000000000, /* col b10 = addr b11 */
+-          0b000000000000000000010000000000, /* col b9 = addr b10 */
+-          0b000000000000000000001000000000, /* col b8 = addr b9 */
+-          0b000000000000000000000100000000, /* col b7 = addr b8*/
+-          0b000000000000000000000010000000, /* col b6 = addr b7 */
+-          0b000000000000000000000000100000, /* col b5 = addr b5 */
+-          0b000000000000000000000000010000, /* col b4 = addr b4*/
+-          0b000000000000000000000000001000, /* col b3 = addr b3 */
+-          0b000000000000000000000000000100, /* col b2 = addr b2 */
+-          0b000000000000000000000000000010, /* col b1 = addr b1 */
+-          0b000000000000000000000000000001, /* col b0 = addr b0*/
+-          0b100000000000000000000000000000, /* row b12 = addr b29 */
+-          0b010000000000000000000000000000, /* row b11 = addr b28 */
+-          0b001000000000000000000000000000, /* row b10 = addr b27 */
+-          0b000100000000000000000000000000, /* row b9 = addr b26 */
+-          0b000010000000000000000000000000, /* row b8 = addr b25 */
+-          0b000001000000000000000000000000, /* row b7 = addr b24 */
+-          0b000000100000000000000000000000, /* row b6 = addr b23 */
+-          0b000000010000000000000000000000, /* row b5 = addr b22 */
+-          0b000000001000000000000000000000, /* row b4 = addr b21 */
+-          0b000000000100000000000000000000, /* row b3 = addr b20 */
+-          0b000000000010000000000000000000, /* row b2 = addr b19 */
+-          0b000000000001000000000000000000, /* row b1 = addr b18 */
+-          0b000000000000100000000000000000, /* row b0 = addr b17 */
+-          },
+-      /* maps a DRAM addr (bank | col | row) --> virtual addr */
+-      .ADDR_MTX =  {
+-          0b000000000000000001000000000000, /* addr b29 = row b12 */
+-          0b000000000000000000100000000000, /* addr b28 = row b11 */
+-          0b000000000000000000010000000000, /* addr b27 = row b10 */
+-          0b000000000000000000001000000000, /* addr b26 = row b9 */
+-          0b000000000000000000000100000000, /* addr b25 = row b8 */
+-          0b000000000000000000000010000000, /* addr b24 = row b7 */
+-          0b000000000000000000000001000000, /* addr b23 = row b6 */
+-          0b000000000000000000000000100000, /* addr b22 = row b5 */
+-          0b000000000000000000000000010000, /* addr b21 = row b4 */
+-          0b000000000000000000000000001000, /* addr b20 = row b3 */
+-          0b000000000000000000000000000100, /* addr b19 = row b2 */
+-          0b000000000000000000000000000010, /* addr b18 = row b1 */
+-          0b000000000000000000000000000001, /* addr b17 = row b0 */
+-          0b000100000000000000000000000100, /* addr b16 = bank b0 + row b2 (addr b19) */
+-          0b001000000000000000000000000010, /* addr b15 = bank b1 + row b1 (addr b18) */
+-          0b010000000000000000000000000001, /* addr b14 = bank b2 + row b0 (addr b17) */
+-          0b000010000000000000000000000000, /* addr b13 = col b12 */
+-          0b000001000000000000000000000000, /* addr b12 = col b11 */
+-          0b000000100000000000000000000000, /* addr b11 = col b10 */
+-          0b000000010000000000000000000000, /* addr b10 = col b9 */
+-          0b000000001000000000000000000000, /* addr b9 = col b8 */
+-          0b000000000100000000000000000000, /* addr b8 = col b7 */
+-          0b000000000010000000000000000000, /* addr b7 = col b6 */
+-          0b100010000000000000000000000000, /* addr b6 = bank b3 + col b12 (addr b13)*/
+-          0b000000000001000000000000000000, /* addr b5 = col b5 */
+-          0b000000000000100000000000000000, /* addr b4 = col b4 */
+-          0b000000000000010000000000000000, /* addr b3 = col b3 */
+-          0b000000000000001000000000000000, /* addr b2 = col b2 */
+-          0b000000000000000100000000000000, /* addr b1 = col b1 */
+-          0b000000000000000010000000000000  /* addr b0 = col b0 */
++      .IDENTIFIER = (CHANS(1UL) | DIMMS(1UL) | RANKS(2UL) | BANKS(16UL)),
++      .BK_SHIFT = 25,
++      .BK_MASK = (0b000000000000000000000000011111),
++      .ROW_SHIFT = 0,
++      .ROW_MASK = (0b000000000000000000111111111111),
++      .COL_SHIFT = 12,
++      .COL_MASK = (0b000000000000000001111111111111),
++      .DRAM_MTX = {          
++          0b000000000000000010000000000000,/* 0x4000 bank B4(RANK) = addr b13*/
++          0b000000001000000000000001000000,/* 0x200040 bank b3 = addr b6 + b21(R3) */
++          0b000000010001000000000000000000,/* 0x440000 bank b2 = addr b18 + b22(R5) */
++          0b000000100010000000000000000000,/* 0x880000 bank b1 = addr b19 + b23(R6) */
++          0b000001000100000000000000000000,/* 0x1100000 bank b0 = addr b20 + b24(R7) */
++          0b000000000000000100000000000000,/* col b12 (c9)= addr b14*/
++          0b000000000000000001000000000000,/* col b11 (c8)= addr b12*/
++          0b000000000000000000100000000000,/* col b10 (c7)= addr b11*/
++          0b000000000000000000010000000000,/* col b9 (c6)= addr b10*/
++          0b000000000000000000001000000000,/* col b8 (c5)= addr b9*/
++          0b000000000000000000000100000000,/* col b7 (c4)= addr b8*/
++          0b000000000000000000000010000000,/* col b6 (c3)= addr b7*/
++          0b000000000000000000000000100000,/* col b5 (c2)= addr b5*/
++          0b000000000000000000000000010000,/* col b4 (c1)= addr b4*/
++          0b000000000000000000000000001000,/* col b3 (c0)= addr b3*/
++          0b000000000000000000000000000100,/* col b2 = addr b2*/
++          0b000000000000000000000000000010,/* col b1 = addr b1*/
++          0b000000000000000000000000000001,/* col b0 = addr b0*/
++          0b010000000000000000000000000000,/* row b11 = addr b28 */
++          0b001000000000000000000000000000,/* row b10 = addr b27 */
++          0b000100000000000000000000000000,/* row b9 = addr b26 */
++          0b000010000000000000000000000000,/* row b8 = addr b25 */
++          0b000001000000000000000000000000,/* row b7 = addr b24 */
++          0b000000100000000000000000000000,/* row b6 = addr b23 */
++          0b000000010000000000000000000000,/* row b5 = addr b22 */
++          0b100000000000000000000000000000,/* row b4 = addr b29 */
++          0b000000001000000000000000000000,/* row b3 = addr b21 */
++          0b000000000000100000000000000000,/* row b2 = addr b17 */
++          0b000000000000010000000000000000,/* row b1 = addr b16 */
++          0b000000000000001000000000000000 /* row b0 = addr b15 */
++       },
++      .ADDR_MTX = {          
++          0b000000000000000000000000010000,/* row b4 = addr b29 */
++          0b000000000000000000100000000000,/* row b11 = addr b28 */
++          0b000000000000000000010000000000,/* row b10 = addr b27 */
++          0b000000000000000000001000000000,/* row b9 = addr b26 */
++          0b000000000000000000000100000000,/* row b8 = addr b25 */
++          0b000000000000000000000010000000,/* row b7 = addr b24 */
++          0b000000000000000000000001000000,/* row b6 = addr b23 */
++          0b000000000000000000000000100000,/* row b5 = addr b22 */
++          0b000000000000000000000000001000,/* row b3 = addr b21 */
++          0b000010000000000000000010000000,/* 0x1100000 bank b0 = addr b20 + b24(R7) */
++          0b000100000000000000000001000000,/* 0x880000 bank b1 = addr b19 + b23(R6) */
++          0b001000000000000000000000100000,/* 0x440000 bank b2 = addr b18 + b22(R5) */
++          0b000000000000000000000000000100,/* row b2 = addr b17 */
++          0b000000000000000000000000000010,/* row b1 = addr b16 */
++          0b000000000000000000000000000001,/* row b0 = addr b15 */
++          0b000001000000000000000000000000,/* col b12 (c9)= addr b13*/
++          0b100000000000000000000000000000,/* 0x4000 bank B4(CS) = addr b14 CS0 or b13?*/
++          0b000000100000000000000000000000,/* col b11 (c8)= addr b12*/
++          0b000000010000000000000000000000,/* col b10 (c7)= addr b11*/
++          0b000000001000000000000000000000,/* col b9 (c6)= addr b10*/
++          0b000000000100000000000000000000,/* col b8 (c5)= addr b9*/
++          0b000000000010000000000000000000,/* col b7 (c4)= addr b8*/
++          0b000000000001000000000000000000,/* col b6 (c3)= addr b7*/
++          0b010000000000000000000000001000,/* 0x200040 bank b3 = addr b6 + b21(R3) */
++          0b000000000000100000000000000000,/* col b5 (c2)= addr b5*/
++          0b000000000000010000000000000000,/* col b4 (c1)= addr b4*/
++          0b000000000000001000000000000000,/* col b3 (c0)= addr b3*/
++          0b000000000000000100000000000000,/* col b2 = addr b2*/
++          0b000000000000000010000000000000,/* col b1 = addr b1*/
++          0b000000000000000001000000000000 /* col b0 = addr b0*/
+       }
+   };
+   struct MemConfiguration dual_rank = {
+       .IDENTIFIER = (CHANS(1UL) | DIMMS(1UL) | RANKS(2UL) | BANKS(16UL)),
+-      .BK_SHIFT =  25,
+-      .BK_MASK =  (0b11111),
+-      .ROW_SHIFT =  0,
+-      .ROW_MASK =  (0b111111111111),
+-      .COL_SHIFT =  12,
+-      .COL_MASK =  (0b1111111111111),
+-      .DRAM_MTX =  {
+-          0b000000000000000010000001000000,
+-          0b000000000001000100000000000000,
+-          0b000000000010001000000000000000,
+-          0b000000000100010000000000000000,
+-          0b000000001000100000000000000000,
+-          0b000000000000000010000000000000,
+-          0b000000000000000001000000000000,
+-          0b000000000000000000100000000000,
+-          0b000000000000000000010000000000,
+-          0b000000000000000000001000000000,
+-          0b000000000000000000000100000000,
+-          0b000000000000000000000010000000,
+-          0b000000000000000000000000100000,
+-          0b000000000000000000000000010000,
+-          0b000000000000000000000000001000,
+-          0b000000000000000000000000000100,
+-          0b000000000000000000000000000010,
+-          0b000000000000000000000000000001,
+-          0b100000000000000000000000000000,
+-          0b010000000000000000000000000000,
+-          0b001000000000000000000000000000,
+-          0b000100000000000000000000000000,
+-          0b000010000000000000000000000000,
+-          0b000001000000000000000000000000,
+-          0b000000100000000000000000000000,
+-          0b000000010000000000000000000000,
+-          0b000000001000000000000000000000,
+-          0b000000000100000000000000000000,
+-          0b000000000010000000000000000000,
+-          0b000000000001000000000000000000
+-      },
+-      .ADDR_MTX =  {
+-          0b000000000000000000100000000000,
+-          0b000000000000000000010000000000,
+-          0b000000000000000000001000000000,
+-          0b000000000000000000000100000000,
+-          0b000000000000000000000010000000,
+-          0b000000000000000000000001000000,
+-          0b000000000000000000000000100000,
+-          0b000000000000000000000000010000,
+-          0b000000000000000000000000001000,
+-          0b000000000000000000000000000100,
+-          0b000000000000000000000000000010,
+-          0b000000000000000000000000000001,
+-          0b000010000000000000000000001000,
+-          0b000100000000000000000000000100,
+-          0b001000000000000000000000000010,
+-          0b010000000000000000000000000001,
+-          0b000001000000000000000000000000,
+-          0b000000100000000000000000000000,
+-          0b000000010000000000000000000000,
+-          0b000000001000000000000000000000,
+-          0b000000000100000000000000000000,
+-          0b000000000010000000000000000000,
+-          0b000000000001000000000000000000,
+-          0b100001000000000000000000000000,
+-          0b000000000000100000000000000000,
+-          0b000000000000010000000000000000,
+-          0b000000000000001000000000000000,
+-          0b000000000000000100000000000000,
+-          0b000000000000000010000000000000,
+-          0b000000000000000001000000000000
++      .BK_SHIFT = 25,
++      .BK_MASK = (0b000000000000000000000000011111),
++      .ROW_SHIFT = 0,
++      .ROW_MASK = (0b000000000000000000111111111111),
++      .COL_SHIFT = 12,
++      .COL_MASK = (0b000000000000000001111111111111),
++      .DRAM_MTX = {          
++          0b000000000000000010000000000000,/* 0x4000 bank B4(RANK) = addr b13*/
++          0b000000001000000000000001000000,/* 0x200040 bank b3 = addr b6 + b21(R3) */
++          0b000000010001000000000000000000,/* 0x440000 bank b2 = addr b18 + b22(R5) */
++          0b000000100010000000000000000000,/* 0x880000 bank b1 = addr b19 + b23(R6) */
++          0b000001000100000000000000000000,/* 0x1100000 bank b0 = addr b20 + b24(R7) */
++          0b000000000000000100000000000000,/* col b12 (c9)= addr b14*/
++          0b000000000000000001000000000000,/* col b11 (c8)= addr b12*/
++          0b000000000000000000100000000000,/* col b10 (c7)= addr b11*/
++          0b000000000000000000010000000000,/* col b9 (c6)= addr b10*/
++          0b000000000000000000001000000000,/* col b8 (c5)= addr b9*/
++          0b000000000000000000000100000000,/* col b7 (c4)= addr b8*/
++          0b000000000000000000000010000000,/* col b6 (c3)= addr b7*/
++          0b000000000000000000000000100000,/* col b5 (c2)= addr b5*/
++          0b000000000000000000000000010000,/* col b4 (c1)= addr b4*/
++          0b000000000000000000000000001000,/* col b3 (c0)= addr b3*/
++          0b000000000000000000000000000100,/* col b2 = addr b2*/
++          0b000000000000000000000000000010,/* col b1 = addr b1*/
++          0b000000000000000000000000000001,/* col b0 = addr b0*/
++          0b010000000000000000000000000000,/* row b11 = addr b28 */
++          0b001000000000000000000000000000,/* row b10 = addr b27 */
++          0b000100000000000000000000000000,/* row b9 = addr b26 */
++          0b000010000000000000000000000000,/* row b8 = addr b25 */
++          0b000001000000000000000000000000,/* row b7 = addr b24 */
++          0b000000100000000000000000000000,/* row b6 = addr b23 */
++          0b000000010000000000000000000000,/* row b5 = addr b22 */
++          0b100000000000000000000000000000,/* row b4 = addr b29 */
++          0b000000001000000000000000000000,/* row b3 = addr b21 */
++          0b000000000000100000000000000000,/* row b2 = addr b17 */
++          0b000000000000010000000000000000,/* row b1 = addr b16 */
++          0b000000000000001000000000000000 /* row b0 = addr b15 */
++       },
++      .ADDR_MTX = {          
++          0b000000000000000000000000010000,/* row b4 = addr b29 */
++          0b000000000000000000100000000000,/* row b11 = addr b28 */
++          0b000000000000000000010000000000,/* row b10 = addr b27 */
++          0b000000000000000000001000000000,/* row b9 = addr b26 */
++          0b000000000000000000000100000000,/* row b8 = addr b25 */
++          0b000000000000000000000010000000,/* row b7 = addr b24 */
++          0b000000000000000000000001000000,/* row b6 = addr b23 */
++          0b000000000000000000000000100000,/* row b5 = addr b22 */
++          0b000000000000000000000000001000,/* row b3 = addr b21 */
++          0b000010000000000000000010000000,/* 0x1100000 bank b0 = addr b20 + b24(R7) */
++          0b000100000000000000000001000000,/* 0x880000 bank b1 = addr b19 + b23(R6) */
++          0b001000000000000000000000100000,/* 0x440000 bank b2 = addr b18 + b22(R5) */
++          0b000000000000000000000000000100,/* row b2 = addr b17 */
++          0b000000000000000000000000000010,/* row b1 = addr b16 */
++          0b000000000000000000000000000001,/* row b0 = addr b15 */
++          0b000001000000000000000000000000,/* col b12 (c9)= addr b13*/
++          0b100000000000000000000000000000,/* 0x4000 bank B4(CS) = addr b14 CS0 or b13?*/
++          0b000000100000000000000000000000,/* col b11 (c8)= addr b12*/
++          0b000000010000000000000000000000,/* col b10 (c7)= addr b11*/
++          0b000000001000000000000000000000,/* col b9 (c6)= addr b10*/
++          0b000000000100000000000000000000,/* col b8 (c5)= addr b9*/
++          0b000000000010000000000000000000,/* col b7 (c4)= addr b8*/
++          0b000000000001000000000000000000,/* col b6 (c3)= addr b7*/
++          0b010000000000000000000000001000,/* 0x200040 bank b3 = addr b6 + b21(R3) */
++          0b000000000000100000000000000000,/* col b5 (c2)= addr b5*/
++          0b000000000000010000000000000000,/* col b4 (c1)= addr b4*/
++          0b000000000000001000000000000000,/* col b3 (c0)= addr b3*/
++          0b000000000000000100000000000000,/* col b2 = addr b2*/
++          0b000000000000000010000000000000,/* col b1 = addr b1*/
++          0b000000000000000001000000000000 /* col b0 = addr b0*/
+       }
+   };
+   DRAMAddr::Configs = {
+-      {(CHANS(1UL) | DIMMS(1UL) | RANKS(1UL) | BANKS(16UL)), single_rank},
++      {(CHANS(1UL) | DIMMS(1UL) | RANKS(2UL) | BANKS(16UL)), single_rank},
+       {(CHANS(1UL) | DIMMS(1UL) | RANKS(2UL) | BANKS(16UL)), dual_rank}
+   };
+ }
+ 
++uint64_t DRAMAddr::get_row_increment() {
++
++  return MemConfig.DRAM_MTX[29];
++}
++
+ #ifdef ENABLE_JSON
+ 
+ void to_json(nlohmann::json &j, const DRAMAddr &p) {
+diff --git a/src/Memory/DramAnalyzer.cpp b/src/Memory/DramAnalyzer.cpp
+index 0064bd3..8d1014c 100644
+--- a/src/Memory/DramAnalyzer.cpp
++++ b/src/Memory/DramAnalyzer.cpp
+@@ -92,11 +92,13 @@ std::vector<uint64_t> DramAnalyzer::get_bank_rank_functions() {
+ 
+ void DramAnalyzer::load_known_functions(int num_ranks) {
+   if (num_ranks==1) {
+-    bank_rank_functions = std::vector<uint64_t>({0x2040, 0x24000, 0x48000, 0x90000});
+-    row_function = 0x3ffe0000;
++    //case0
++    bank_rank_functions = std::vector<uint64_t>({0x2000, 0x200040, 0x440000, 0x880000, 0x1100000});
++    row_function = 0x3fe38000;
+   } else if (num_ranks==2) {
+-    bank_rank_functions = std::vector<uint64_t>({0x2040, 0x44000, 0x88000, 0x110000, 0x220000});
+-    row_function = 0x3ffc0000;
++    //case0
++    bank_rank_functions = std::vector<uint64_t>({0x2000, 0x200040, 0x440000, 0x880000, 0x1100000});
++    row_function = 0x3fe38000;
+   } else {
+     Logger::log_error("Cannot load bank/rank and row function if num_ranks is not 1 or 2.");
+     exit(1);
+@@ -112,21 +114,24 @@ void DramAnalyzer::load_known_functions(int num_ranks) {
+   Logger::log_data(ss.str());
+ }
+ 
+-size_t DramAnalyzer::count_acts_per_trefi() {
+-  size_t skip_first_N = 50;
++size_t DramAnalyzer::count_acts_per_ref() {
+   // pick two random same-bank addresses
+   volatile char *a = banks.at(0).at(0);
+   volatile char *b = banks.at(0).at(1);
+ 
++  size_t skip_first_N = 2000;
+   std::vector<uint64_t> acts;
+   uint64_t running_sum = 0;
+-  uint64_t before;
+-  uint64_t after;
+-  uint64_t count = 0;
+-  uint64_t count_old = 0;
++  uint64_t before, after;
++  uint64_t activation_count = 0, activation_count_old = 0;
++
++  // bring a and b into the cache
++  (void)*a;
++  (void)*b;
+ 
+   // computes the standard deviation
+-  auto compute_std = [](std::vector<uint64_t> &values, uint64_t running_sum, size_t num_numbers) {
++  auto compute_std = [](
++      std::vector<uint64_t> &values, uint64_t running_sum, size_t num_numbers) {
+     double mean = static_cast<double>(running_sum)/static_cast<double>(num_numbers);
+     double var = 0;
+     for (const auto &num : values) {
+@@ -154,17 +159,18 @@ size_t DramAnalyzer::count_acts_per_trefi() {
+     // get end timestamp
+     after = rdtscp();
+ 
+-    count++;
+-    if ((after - before) > 1000) {
+-      if (i > skip_first_N && count_old!=0) {
+-        // multiply by 2 to account for both accesses we do (a, b)
+-        uint64_t value = (count - count_old)*2;
++    activation_count += 2;
++
++    if ((after - before) > 780) {
++      if (i > skip_first_N && activation_count_old!=0) {
++        uint64_t value = (activation_count - activation_count_old)*2;
+         acts.push_back(value);
+         running_sum += value;
+         // check after each 200 data points if our standard deviation reached 1 -> then stop collecting measurements
+-        if ((acts.size()%200)==0 && compute_std(acts, running_sum, acts.size())<3.0) break;
++        if ((acts.size()%200)==0 && compute_std(acts, running_sum, acts.size())<3.0)
++          break;
+       }
+-      count_old = count;
++      activation_count_old = activation_count;
+     }
+   }
+ 
+diff --git a/src/Memory/Memory.cpp b/src/Memory/Memory.cpp
+index e52ff81..078642b 100644
+--- a/src/Memory/Memory.cpp
++++ b/src/Memory/Memory.cpp
+@@ -1,6 +1,7 @@
+ #include "Memory/Memory.hpp"
+ 
+ #include <sys/mman.h>
++#include <iostream>
+ 
+ /// Allocates a MEM_SIZE bytes of memory by using super or huge pages.
+ void Memory::allocate_memory(size_t mem_size) {
+@@ -16,8 +17,10 @@ void Memory::allocate_memory(size_t mem_size) {
+       Logger::log_data(std::strerror(errno));
+       exit(EXIT_FAILURE);
+     }
++    //auto mapped_target = mmap((void *) start_address, MEM_SIZE, PROT_READ | PROT_WRITE,
++    //    MAP_SHARED | MAP_ANONYMOUS | MAP_HUGETLB | (30UL << MAP_HUGE_SHIFT), fileno(fp), 0);
+     auto mapped_target = mmap((void *) start_address, MEM_SIZE, PROT_READ | PROT_WRITE,
+-        MAP_SHARED | MAP_ANONYMOUS | MAP_HUGETLB | (30UL << MAP_HUGE_SHIFT), fileno(fp), 0);
++        MAP_PRIVATE | MAP_FIXED | MAP_HUGETLB | (30UL << MAP_HUGE_SHIFT), fileno(fp), 0);
+     if (mapped_target==MAP_FAILED) {
+       perror("mmap");
+       exit(EXIT_FAILURE);
+@@ -40,33 +43,55 @@ void Memory::allocate_memory(size_t mem_size) {
+   }
+ 
+   // initialize memory with random but reproducible sequence of numbers
+-  initialize(DATA_PATTERN::RANDOM);
++  initialize(DATA_PATTERN::STRIPE_0F);
+ }
+ 
+ void Memory::initialize(DATA_PATTERN data_pattern) {
+   Logger::log_info("Initializing memory with pseudorandom sequence.");
+ 
+-  // for each page in the address space [start, end]
+-  for (uint64_t cur_page = 0; cur_page < size; cur_page += getpagesize()) {
++// enum class DATA_WRITE_PATTERN : char {
++//   STRIPE_0F, STRIPE_F0, CHECK_5A, CHECK_A5, CHECK_69, CHECK_96
++//};
++        int fill_value_even = 0x00000000;
++        int fill_value_odd = 0xffffffff;
++      if (data_pattern == DATA_PATTERN::STRIPE_0F) {
++        fill_value_even = 0x00000000;
++        fill_value_odd = 0xffffffff;
++      } else if (data_pattern ==  DATA_PATTERN::STRIPE_F0) {
++        fill_value_even = 0xffffffff;
++        fill_value_odd = 0x00000000;
++      } else if (data_pattern ==  DATA_PATTERN::CHECK_5A) {
++        fill_value_even = 0x55555555;
++        fill_value_odd = 0xaaaaaaaa;
++      } else if (data_pattern ==  DATA_PATTERN::CHECK_A5) {
++        fill_value_even = 0xaaaaaaaa;
++        fill_value_odd = 0x55555555;
++      } else if (data_pattern ==  DATA_PATTERN::CHECK_69) {
++        fill_value_even = 0x66666666;
++        fill_value_odd = 0x99999999;
++      } else if (data_pattern ==  DATA_PATTERN::CHECK_96) {
++        fill_value_even = 0x9999999;
++        fill_value_odd = 0x66666666;
++      } else {
++        Logger::log_error("Could not initialize memory with given (unknown) DATA_PATTERN.");
++      }
++  //size_t ROW_SHIFT = 0b000000000000001000000000000000;
++  auto ROW_SHIFT = 15;
++  for (uint64_t cur_page = 0; cur_page < Memory::size; cur_page += getpagesize()) {
+     // reseed rand to have a sequence of reproducible numbers, using this we can compare the initialized values with
+     // those after hammering to see whether bit flips occurred
+-    srand(static_cast<unsigned int>(cur_page*getpagesize()));
+     for (uint64_t cur_pageoffset = 0; cur_pageoffset < (uint64_t) getpagesize(); cur_pageoffset += sizeof(int)) {
+ 
+-      int fill_value = 0;
+-      if (data_pattern == DATA_PATTERN::RANDOM) {
+-        fill_value = rand();
+-      } else if (data_pattern == DATA_PATTERN::ZEROES) {
+-        fill_value = 0;
+-      } else if (data_pattern == DATA_PATTERN::ONES) {
+-        fill_value = 1;
++      uint64_t offset = cur_page + cur_pageoffset;
++      auto p = (size_t) Memory::start_address + offset;
++      auto row = (p >> ROW_SHIFT) % 2;
++      //std::cout << "init address by int " << (void *) (start_address+offset) << " " << std::endl;
++      // std::cout << "Row even or odd " << row << " " << std::endl;
++      if (row==0){
++        *((int *) (Memory::start_address + offset)) = fill_value_even;
+       } else {
+-        Logger::log_error("Could not initialize memory with given (unknown) DATA_PATTERN.");
++        *((int *) (Memory::start_address + offset)) = fill_value_odd;
+       }
+-        
+-      // write (pseudo)random 4 bytes
+-      uint64_t offset = cur_page + cur_pageoffset;
+-      *((int *) (start_address + offset)) = fill_value;
+     }
+   }
+ }
+@@ -79,14 +104,49 @@ size_t Memory::check_memory(PatternAddressMapper &mapping, bool reproducibility_
+ 
+   size_t sum_found_bitflips = 0;
+   for (const auto &victim_row : victim_rows) {
+-    auto victim_dram_addr = DRAMAddr((char*)victim_row);
+-    victim_dram_addr.add_inplace(0, 1, 0);
+     sum_found_bitflips += check_memory_internal(mapping, victim_row,
+-        (volatile char *) victim_dram_addr.to_virt(), reproducibility_mode, verbose);
++        (volatile char *) ((uint64_t)victim_row+DRAMAddr::get_row_increment()), reproducibility_mode, verbose);
++  }
++  return sum_found_bitflips;
++}
++
++
++size_t Memory::check_victim_memory(std::vector<volatile char *> &victim, size_t row_inc, size_t distance, size_t bank, size_t even) {
++  flipped_bits.clear();
++  // create a "fake" pattern mapping to keep this method for backward compatibility
++  PatternAddressMapper pattern_mapping;
++  size_t sum_found_bitflips = 0;
++  Logger::log_info(format_string("Checking %zu victims for bit flips.", victim.size()));
++
++  for (size_t i = 0; i <victim.size(); i++) {
++    sum_found_bitflips += check_memory_internal(pattern_mapping, victim[i],
++        true, true, row_inc, distance, bank, victim.size()-1, even);
++    
++//    Logger::log_info(format_string("Checking : %zu, 0x%llx ", i, aggressors[i]));
++  }
++  Logger::log_info(format_string("Flip bits : %zu, # of victim : %zu", sum_found_bitflips, victim.size()));
++  return sum_found_bitflips;
++}
++
++size_t Memory::check_memory(std::vector<volatile char *> &aggressors, size_t row_inc, size_t distance, size_t bank) {
++  flipped_bits.clear();
++  // create a "fake" pattern mapping to keep this method for backward compatibility
++  PatternAddressMapper pattern_mapping;
++  size_t sum_found_bitflips = 0;
++  Logger::log_info(format_string("Checking %zu victims for bit flips.", aggressors.size()));
++
++  for (size_t i = 0; i <aggressors.size(); i++) {
++    sum_found_bitflips += check_memory_internal(pattern_mapping, aggressors[i],
++        (volatile char *) ((uint64_t)aggressors[i]+DRAMAddr::get_row_increment()), true, true, row_inc, distance, bank, aggressors.size());
++    sum_found_bitflips += check_memory_internal(pattern_mapping, 
++        (volatile char *) ((uint64_t)aggressors[i]-DRAMAddr::get_row_increment()), aggressors[i],true, true, row_inc, distance, bank, aggressors.size());
++//    Logger::log_info(format_string("Checking : %zu, 0x%llx ", i, aggressors[i]));
+   }
++  Logger::log_info(format_string("Flip bits : %zu, # of Aggressors : %zu", sum_found_bitflips, aggressors.size()));
+   return sum_found_bitflips;
+ }
+ 
++
+ size_t Memory::check_memory(const volatile char *start, const volatile char *end) {
+   flipped_bits.clear();
+   // create a "fake" pattern mapping to keep this method for backward compatibility
+@@ -102,13 +162,25 @@ size_t Memory::check_memory_internal(PatternAddressMapper &mapping,
+   // counter for the number of found bit flips in the memory region [start, end]
+   size_t found_bitflips = 0;
+ 
+-  if (start==nullptr || end==nullptr || ((uint64_t) start >= (uint64_t) end)) {
++  if (start==nullptr || end==nullptr || ((uint64_t) start > (uint64_t) end)) {
+     Logger::log_error("Function check_memory called with invalid arguments.");
+     Logger::log_data(format_string("Start addr.: %s", DRAMAddr((void *) start).to_string().c_str()));
+     Logger::log_data(format_string("End addr.: %s", DRAMAddr((void *) end).to_string().c_str()));
+     return found_bitflips;
+   }
+ 
++  auto check_offset = 1;
++
++  auto row_increment = DRAMAddr::get_row_increment();
++
++//  Logger::log_info(format_string("row increment 0x%llx.", row_increment));
++
++  start -= row_increment*check_offset;
++  end += row_increment*check_offset;
++
++//    Logger::log_data(format_string("Start addr.: %s", DRAMAddr((void *) start).to_string().c_str()));
++//    Logger::log_data(format_string("End addr.: %s", DRAMAddr((void *) end).to_string().c_str()));
++
+   auto start_offset = (uint64_t) (start - start_address);
+ 
+   const auto pagesize = static_cast<size_t>(getpagesize());
+@@ -135,7 +207,7 @@ size_t Memory::check_memory_internal(PatternAddressMapper &mapping,
+       page[j] = rand();
+ 
+     uint64_t addr = ((uint64_t)start_address+i);
+-
++  //  Logger::log_data(format_string("checking addr.: %s", DRAMAddr((void *) addr).to_string().c_str()));
+     // check if any bit flipped in the page using the fast memcmp function, if any flip occurred we need to iterate over
+     // each byte one-by-one (much slower), otherwise we just continue with the next page
+     if ((addr+ pagesize) < ((uint64_t)start_address+size) && memcmp((void*)addr, (void*)page, pagesize) == 0)
+@@ -201,6 +273,240 @@ size_t Memory::check_memory_internal(PatternAddressMapper &mapping,
+   return found_bitflips;
+ }
+ 
++size_t Memory::check_memory_internal(PatternAddressMapper &mapping,
++                                     const volatile char *start,
++                                     const volatile char *end,
++                                     bool reproducibility_mode,
++                                     bool verbose, size_t row_inc, size_t distance, size_t bank, size_t agg_size) {
++  // counter for the number of found bit flips in the memory region [start, end]
++  size_t found_bitflips = 0;
++
++  if (start==nullptr || end==nullptr || ((uint64_t) start > (uint64_t) end)) {
++    Logger::log_error("Function check_memory called with invalid arguments.");
++    Logger::log_data(format_string("Start addr.: %s", DRAMAddr((void *) start).to_string().c_str()));
++    Logger::log_data(format_string("End addr.: %s", DRAMAddr((void *) end).to_string().c_str()));
++    return found_bitflips;
++  }
++
++  auto check_offset = 1;
++
++  auto row_increment = DRAMAddr::get_row_increment();
++
++//  Logger::log_info(format_string("row increment 0x%llx.", row_increment));
++
++  start -= row_increment*check_offset;
++  end += row_increment*check_offset;
++
++//    Logger::log_data(format_string("Start addr.: %s", DRAMAddr((void *) start).to_string().c_str()));
++//    Logger::log_data(format_string("End addr.: %s", DRAMAddr((void *) end).to_string().c_str()));
++
++  auto start_offset = (uint64_t) (start - start_address);
++
++  const auto pagesize = static_cast<size_t>(getpagesize());
++  start_offset = (start_offset/pagesize)*pagesize;
++
++  auto end_offset = start_offset + (uint64_t) (end - start);
++  end_offset = (end_offset/pagesize)*pagesize;
++
++  void *page_raw = malloc(pagesize);
++  if (page_raw == nullptr) {
++    Logger::log_error("Could not create temporary page for memory comparison.");
++    exit(EXIT_FAILURE);
++  }
++  memset(page_raw, 0, pagesize);
++  int *page = (int*)page_raw;
++
++  // for each page (4K) in the address space [start, end]
++  for (uint64_t i = start_offset; i < end_offset; i += pagesize) {
++    // reseed rand to have the desired sequence of reproducible numbers
++    srand(static_cast<unsigned int>(i*pagesize));
++
++    // fill comparison page with expected values generated by rand()
++    for (size_t j = 0; j < (unsigned long) pagesize/sizeof(int); ++j)
++      page[j] = rand();
++
++    uint64_t addr = ((uint64_t)start_address+i);
++  //  Logger::log_data(format_string("checking addr.: %s", DRAMAddr((void *) addr).to_string().c_str()));
++    // check if any bit flipped in the page using the fast memcmp function, if any flip occurred we need to iterate over
++    // each byte one-by-one (much slower), otherwise we just continue with the next page
++    if ((addr+ pagesize) < ((uint64_t)start_address+size) && memcmp((void*)addr, (void*)page, pagesize) == 0)
++      continue;
++
++    // iterate over blocks of 4 bytes (=sizeof(int))
++    for (uint64_t j = 0; j < (uint64_t) pagesize; j += sizeof(int)) {
++      uint64_t offset = i + j;
++      volatile char *cur_addr = start_address + offset;
++
++      // if this address is outside the superpage we must not proceed to avoid segfault
++      if ((uint64_t)cur_addr >= ((uint64_t)start_address+size))
++        continue;
++
++      // clear the cache to make sure we do not access a cached value
++      clflushopt(cur_addr);
++      mfence();
++
++      // if the bit did not flip -> continue checking next block
++      int expected_rand_value = page[j/sizeof(int)];
++      if (*((int *) cur_addr)==expected_rand_value)
++        continue;
++
++      // if the bit flipped -> compare byte per byte
++      for (unsigned long c = 0; c < sizeof(int); c++) {
++        volatile char *flipped_address = cur_addr + c;
++        if (*flipped_address != ((char *) &expected_rand_value)[c]) {
++          const auto flipped_addr_dram = DRAMAddr((void *) flipped_address);
++          assert(flipped_address == (volatile char*)flipped_addr_dram.to_virt());
++          const auto flipped_addr_value = *(unsigned char *) flipped_address;
++          const auto expected_value = ((unsigned char *) &expected_rand_value)[c];
++          if (verbose) {
++            Logger::log_bitflip(flipped_address, flipped_addr_dram.row,
++                expected_value, flipped_addr_value, (size_t) time(nullptr), true, row_inc, distance, bank, agg_size);
++          }
++          // store detailed information about the bit flip
++          BitFlip bitflip(flipped_addr_dram, (expected_value ^ flipped_addr_value), flipped_addr_value);
++          // ..in the mapping that triggered this bit flip
++          if (!reproducibility_mode) {
++            if (mapping.bit_flips.empty()) {
++              Logger::log_error("Cannot store bit flips found in given address mapping.\n"
++                                "You need to create an empty vector in PatternAddressMapper::bit_flips before calling "
++                                "check_memory.");
++            }
++            mapping.bit_flips.back().push_back(bitflip);
++          }
++          // ..in an attribute of this class so that it can be retrived by the caller
++          flipped_bits.push_back(bitflip);
++          found_bitflips += bitflip.count_bit_corruptions();
++        }
++      }
++
++      // restore original (unflipped) value
++      *((int *) cur_addr) = expected_rand_value;
++
++      // flush this address so that value is committed before hammering again there
++      clflushopt(cur_addr);
++      mfence();
++    }
++  }
++  
++  free(page);
++  return found_bitflips;
++}
++
++
++size_t Memory::check_memory_internal(PatternAddressMapper &mapping,
++                                     const volatile char *start,
++                                     bool reproducibility_mode,
++                                     bool verbose, size_t row_inc, size_t distance, size_t bank, size_t agg_size, size_t even) {
++  // counter for the number of found bit flips in the memory region [start, end]
++  size_t found_bitflips = 0;
++
++  if (start==nullptr) {
++    Logger::log_error("Function check_memory called with invalid arguments.");
++    Logger::log_data(format_string("Start addr.: %s", DRAMAddr((void *) start).to_string().c_str()));
++    return found_bitflips;
++  }
++  auto start_offset = (uint64_t) (start - start_address);
++
++  volatile char *cur_addr = start_address + start_offset;
++
++  clflushopt(cur_addr);
++  mfence();
++
++  auto start_dram = DRAMAddr((void *) start);
++  volatile char * start_addr = (volatile char *) start_dram.to_virt();
++  
++  char compare_char=0;
++  int compare_int=0;
++
++  if (even%2 == 0){
++    if (start_dram.row%2 == 0){
++      compare_char=0x00;
++      compare_int=0x00000000;
++    } else {
++      compare_char=0xff;
++      compare_int=0xffffffff;
++    }
++  } else {
++    if (start_dram.row%2 == 0){
++      compare_char=0xff;
++      compare_int=0xffffffff;
++    } else {
++      compare_char=0x00;
++      compare_int=0x00000000;
++    }
++  }
++
++   const auto pagesize = static_cast<size_t>(getpagesize());
++
++
++  void *page_raw = malloc(pagesize*2);
++  if (page_raw == nullptr) {
++    Logger::log_error("Could not create temporary page for memory comparison.");
++    exit(EXIT_FAILURE);
++  }
++
++  memset(page_raw, compare_char, pagesize*2);
++  int *page = (int*)page_raw;
++  char expected_value = compare_char;
++
++  for (int i = 0; i < 8192; i += sizeof(int)) {
++ //       std::cout << "read address by int " << (void *) start_addr << " " << std::endl;
++ //       std::cout << "inner loop i " << i << " " << std::endl;
++    if (memcmp((void*)start_addr, (void*)page, sizeof(int)) == 0){
++//    if ((start_addr+ sizeof(int)) < ((uint64_t)start_address+size) && memcmp((void*)start_addr, (void*)page, sizeof(int)) == 0){
++        start_dram.add_inplace(0, 0, sizeof(int));
++        start_addr = (volatile char *) start_dram.to_virt();
++      continue;}
++
++    for (unsigned long c = 0; c < sizeof(int); c++) {
++          volatile char *read_address = start_addr + c;
++          const char read_value = *(unsigned char *) read_address;
++          
++          if (read_value==expected_value){
++          ;
++          } else {
++            // if (expected_value == (char) 0xff)
++            //   std::cout << "read value " << read_value << " expected value " << expected_value <<std::endl;
++
++            const auto flipped_addr_dram = DRAMAddr((void *) read_address);
++            assert(read_address == (volatile char*)flipped_addr_dram.to_virt());
++
++              if (verbose) {
++                Logger::log_bitflip(read_address, flipped_addr_dram.row, flipped_addr_dram.col,
++                     read_value, expected_value, (size_t) time(nullptr), true, row_inc, distance, bank, agg_size);
++              }
++              // store detailed information about the bit flip
++              BitFlip bitflip(flipped_addr_dram, (expected_value ^ read_value), read_value);
++              // ..in the mapping that triggered this bit flip
++              if (!reproducibility_mode) {
++                if (mapping.bit_flips.empty()) {
++                  Logger::log_error("Cannot store bit flips found in given address mapping.\n"
++                                    "You need to create an empty vector in PatternAddressMapper::bit_flips before calling "
++                                    "check_memory.");
++                }
++                mapping.bit_flips.back().push_back(bitflip);
++              }
++              // ..in an attribute of this class so that it can be retrived by the caller
++              flipped_bits.push_back(bitflip);
++              found_bitflips += bitflip.count_bit_corruptions();
++              // restore background  value
++              *((int *) start_addr) = compare_int;
++            }
++        
++    }
++      start_dram.add_inplace(0, 0, sizeof(int));
++      start_addr = (volatile char *) start_dram.to_virt();
++    }
++      // flush this address so that value is committed before hammering again there
++      clflushopt(cur_addr);
++      mfence();
++      free(page);
++      return found_bitflips;
++}
++
++
++
++
+ Memory::Memory(bool use_superpage) : size(0), superpage(use_superpage) {
+ }
+ 
+diff --git a/src/Utilities/Logger.cpp b/src/Utilities/Logger.cpp
+index 9df1778..be89338 100644
+--- a/src/Utilities/Logger.cpp
++++ b/src/Utilities/Logger.cpp
+@@ -88,6 +88,51 @@ void Logger::log_timestamp() {
+   log_info(ss.str());
+ }
+ 
++ulong Logger::vtop(ulong vaddr) {
++    FILE *pagemap;
++    ulong paddr = 0;
++    int offset = (vaddr / sysconf(_SC_PAGESIZE)) * sizeof(uint64_t);
++    uint64_t e;
++
++    // https://www.kernel.org/doc/Documentation/vm/pagemap.txt
++    if ((pagemap = fopen("/proc/self/pagemap", "r"))) {
++        if (lseek(fileno(pagemap), offset, SEEK_SET) == offset) {
++            if (fread(&e, sizeof(uint64_t), 1, pagemap)) {
++                if (e & (1ULL << 63)) { // page present ?
++                    paddr = e & ((1ULL << 54) - 1); // pfn mask
++                    paddr = paddr * sysconf(_SC_PAGESIZE);
++                    // add offset within page
++                    paddr = paddr | (vaddr & (sysconf(_SC_PAGESIZE) - 1));
++                }   
++            }   
++        }   
++        fclose(pagemap);
++    }   
++
++    return paddr;
++}  
++
++ulong Logger::vtopfn(ulong vaddr) {
++    FILE *pagemap;
++    ulong paddr = 0;
++    int offset = (vaddr / sysconf(_SC_PAGESIZE)) * sizeof(uint64_t);
++    uint64_t e;
++
++    // https://www.kernel.org/doc/Documentation/vm/pagemap.txt
++    if ((pagemap = fopen("/proc/self/pagemap", "r"))) {
++        if (lseek(fileno(pagemap), offset, SEEK_SET) == offset) {
++            if (fread(&e, sizeof(uint64_t), 1, pagemap)) {
++                if (e & (1ULL << 63)) { // page present ?
++                    paddr = e & ((1ULL << 54) - 1); // pfn mask
++                }   
++            }   
++        }   
++        fclose(pagemap);
++    }   
++
++    return paddr;
++}  
++
+ void Logger::log_bitflip(volatile char *flipped_address, uint64_t row_no, unsigned char actual_value,
+                          unsigned char expected_value, unsigned long timestamp, bool newline) {
+   instance.logfile << FC_GREEN
+@@ -101,6 +146,52 @@ void Logger::log_bitflip(volatile char *flipped_address, uint64_t row_no, unsign
+   if (newline) instance.logfile << "\n";
+ }
+ 
++void Logger::log_bitflip(volatile char *flipped_address, uint64_t row_no, unsigned char actual_value,
++                         unsigned char expected_value, unsigned long timestamp, bool newline, size_t row_inc, size_t distance, size_t bank, size_t agg_size) {
++  instance.logfile << FC_GREEN
++                   << "[!] Flip " << std::hex << (void *) flipped_address << ", "
++                  << std::dec << "# of agg " << agg_size << ", "
++                   << std::dec << "row_inc " << row_inc << ", "
++                   << std::dec << "distance " << distance << ", "
++                   << std::dec << "bank " << bank << ", "
++                   << std::dec << "row " << row_no << ", "
++                   << "page offset: " << (uint64_t)flipped_address%(uint64_t)getpagesize() << ", "
++                   << "byte offset: " << (uint64_t)flipped_address%(uint64_t)8 << ", "
++                   << std::hex << "from " << (int) expected_value << " to " << (int) actual_value << ", "
++                   << std::dec << "detected after " << format_timestamp(timestamp - instance.timestamp_start) << ".";
++  instance.logfile << F_RESET;
++  if (newline) instance.logfile << "\n";
++}
++
++void Logger::log_bitflip(volatile char *flipped_address, uint64_t row_no, uint64_t col_no, unsigned char actual_value,
++                         unsigned char expected_value, unsigned long timestamp, bool newline, size_t row_inc, size_t distance, size_t bank, size_t agg_size) {
++  ulong vaddr = 0, paddr = 0, pfn = 0;
++  vaddr = (ulong)(void *) flipped_address;
++  paddr = vtop(vaddr);
++  pfn = vtopfn(vaddr);
++
++
++  instance.logfile << FC_GREEN
++                   << "[!] Flip " << std::hex << (void *) flipped_address << ", "
++                   << "VADDR[0x] " << std::hex << vaddr << ", "
++                   << "PADDR[0x] " << std::hex << paddr << ", "
++                   << "PFN[0x] " << std::hex << pfn << ", "
++                   << "PADDR[0d] " << std::dec << paddr << ", "
++                   << "PFN[0d] " << std::dec << pfn << ", "
++                   << std::dec << "# of agg " << agg_size << ", "
++                   << std::dec << "row_inc " << row_inc << ", "
++                   << std::dec << "distance " << distance << ", "
++                   << std::dec << "bank " << bank << ", "
++                   << std::dec << "row " << row_no << ", "
++                   << std::dec << "col " << col_no/8 << ", "
++//                   << "page offset: " << (uint64_t)flipped_address%(uint64_t)getpagesize() << ", "
++                   << "byte offset: " << (uint64_t)flipped_address%(uint64_t)8 << ", "
++                   << std::hex << "from " << (int) expected_value << " to " << (int) actual_value << ", "
++                   << std::dec << "detected after " << format_timestamp(timestamp - instance.timestamp_start) << ".";
++  instance.logfile << F_RESET;
++  if (newline) instance.logfile << "\n";
++}
++
+ void Logger::log_success(const std::string &message, bool newline) {
+   instance.logfile << FC_GREEN << "[!] " << message;
+   instance.logfile << F_RESET;
