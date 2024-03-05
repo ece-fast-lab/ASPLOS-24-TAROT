@@ -25,6 +25,7 @@ Python 3.0+ (Post data process)
 1) Reverse-engineering Physical Address to DRAM Address Mapping
    We use "DRAMA" to reverse engineering the Physical Address to DRAM Address Mapping.
    
-   https://github.com/IAIK/drama.git (Peter Pessl et al. "DRAMA: Exploiting DRAM Addressing for Cross-CPU Attacks". In 25th USENIX Security Symposium (USENIX Security 16).)
+   https://github.com/IAIK/drama.git
+   (Peter Pessl et al. "DRAMA: Exploiting DRAM Addressing for Cross-CPU Attacks". In 25th USENIX Security Symposium (USENIX Security 16).)
 
    - We provide the mapping function for Haswell and Broadwell server in the modified code of row hammer attacks(
