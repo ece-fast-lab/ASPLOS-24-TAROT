@@ -94,6 +94,20 @@ Python 3.0+ (Post data process)
 
 5) Trouble shooting.
 
+   - System Crash by UE.
+     When Uncorrectable Error is generated, system will be crashed.
+     For monitoring the UEs, disable ecc.
+     
+     1) ECC off on the bios menu.
+     2) ECC off by modifying MSR register using PCM (please refer ./1_RH_BIT_FLIP/troubleshoot/README.md).
+
+   - No RH-error from RH attack program.
+     Since latest DRAMs have in-dram mitigation logic, it is difficult to reproduce bit-flip.
+     Modifying REFRESH rate of DRAM helps to generate bit-flip errors.
+     Please refer ./1_RH_BIT_FLIP/troubleshoot/README.md
+
+
+# 2. Reproducing "Performance evaluation:.
    
 
 
