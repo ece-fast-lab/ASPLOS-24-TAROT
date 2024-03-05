@@ -22,15 +22,7 @@ Python 3.0+ (Post data process)
 
 # 1. Reproducing "RH-induced Bit Flips".
 
-1) Reverse-engineering Physical Address to DRAM Address Mapping
-   We use "DRAMA" to reverse engineering the Physical Address to DRAM Address Mapping.
-   
-   https://github.com/IAIK/drama.git
-   (Peter Pessl et al. "DRAMA: Exploiting DRAM Addressing for Cross-CPU Attacks". In 25th USENIX Security Symposium (USENIX Security 16).)
-
-   We provide the mapping function for Haswell and Broadwell server in the modified code of row hammer attacks(Link).
-
-2) Allocate N * 1GB hugepages on boot time. (e.g., 4 * 1GB)
+1) Allocate N * 1GB hugepages on boot time. (e.g., 4 * 1GB)
 
    1. Update grub file
    ```  
@@ -58,3 +50,19 @@ Python 3.0+ (Post data process)
    ```  
    $ sudo reboot
    ```
+
+2) Reverse-engineering Physical Address to DRAM Address Mapping
+   We use "DRAMA" to reverse engineering the Physical Address to DRAM Address Mapping.
+   
+   https://github.com/IAIK/drama.git
+   (Peter Pessl et al. "DRAMA: Exploiting DRAM Addressing for Cross-CPU Attacks". In 25th USENIX Security Symposium (USENIX Security 16).)
+
+   We provide the mapping function for Haswell and Broadwell server in the modified code of row hammer attacks.
+
+3) Running RH attack program.
+
+   We modiied "BLACKSMITH" Row-hammer fuzzer for N-sided Row-hammer attack with stripe-pattern.
+
+   https://github.com/comsec-group/blacksmith
+   (Patrick Jattke et al. "BLACKSMITH: Scalable Rowhammering in the Frequency Domain".)
+
