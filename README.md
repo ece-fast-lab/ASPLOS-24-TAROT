@@ -66,3 +66,8 @@ Python 3.0+ (Post data process)
    https://github.com/comsec-group/blacksmith
    (Patrick Jattke et al. "BLACKSMITH: Scalable Rowhammering in the Frequency Domain".)
 
+   ```  
+   $ git clone https://github.com/comsec-group/blacksmith.git
+   $
+   ```
+
