@@ -30,7 +30,7 @@ Python 3.0+ (Post data process)
 
    We provide the mapping function for Haswell and Broadwell server in the modified code of row hammer attacks(Link).
 
-2) Allocate N * 1GB hugepages on boot time.
+2) Allocate N * 1GB hugepages on boot time. (e.g., 4 * 1GB)
 
    1. Update grub file
    ```  
@@ -38,7 +38,7 @@ Python 3.0+ (Post data process)
    ```
    
    ```
-   GRUB_CMDLINE_LINUX_DEFAULT="default_hugepagesz=1G hugepagesz=1G hugepages=N"
+   GRUB_CMDLINE_LINUX_DEFAULT="default_hugepagesz=1G hugepagesz=1G hugepages=4"
    ```
    
    ```
@@ -52,11 +52,7 @@ Python 3.0+ (Post data process)
    ```
    
    ```
-   # for host
    none /mnt/huge hugetlbfs pagesize=1G,size=4G 0 0
-   # for container
-   none /mnt/huge_c0 hugetlbfs pagesize=1G,size=1G 0 0
-   # none /mnt/huge_c1 hugetlbfs pagesize=1G,size=1G 0 0 # For another container, add the entry like this
    ```
 
    ```  
