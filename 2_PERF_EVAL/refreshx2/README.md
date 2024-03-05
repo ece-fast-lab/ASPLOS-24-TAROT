@@ -48,6 +48,49 @@ Modifying MSR for double Refresh Rate of DRAM.
   ```
 
   You can find the detailed register addresses in [the Intel(R) uncore register data sheet.](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/xeon-e5-1600-2600-vol-2-datasheet.pdf)
+  (4.4.11.6, T_REFI)
 
+  Check refresh interval (T_REFI)
+  ``` 
+   $ cd bin
+   $ sudo ./pcm-cpicfg 0 0x7f 0x14 0 0x214 | grep value
+   $ sudo ./pcm-cpicfg 0 0x7f 0x14 1 0x214 | grep value
+   $ sudo ./pcm-cpicfg 0 0x7f 0x17 0 0x214 | grep value
+   $ sudo ./pcm-cpicfg 0 0x7f 0x17 1 0x214 | grep value
+   $ sudo ./pcm-cpicfg 0 0xff 0x14 0 0x214 | grep value
+   $ sudo ./pcm-cpicfg 0 0xff 0x14 1 0x214 | grep value
+   $ sudo ./pcm-cpicfg 0 0xff 0x17 0 0x214 | grep value
+   $ sudo ./pcm-cpicfg 0 0xff 0x17 1 0x214 | grep value
+  
+  Read value 0x1240062c from 0:0x7f:0x14:0@0x214
+  Read value 0xa4d2a490 from 0:0x7f:0x14:0x1@0x214
+  Read value 0x1240062c from 0:0x7f:0x17:0@0x214
+  Read value 0x1240062c from 0:0x7f:0x17:0x1@0x214
+  Read value 0x1240062c from 0:0xff:0x14:0@0x214
+  Read value 0x1240062c from 0:0xff:0x14:0x1@0x214
+  Read value 0x1240062c from 0:0xff:0x17:0@0x214
+  Read value 0x1240062c from 0:0xff:0x17:0x1@0x214
+  ```
+
+   In the example server environment with 1 DIMM, only "group : 0 , BUS : 0x7f , Device : 0x14 , Function 0x1 , Offset: 0x214" register shows register value of "0x2490" (value[14:0]).
+
+   The T_REFI is 7.8us with 0x2490 in the 2400MT/s. (0x2490 * 1/(2400/2) = 7.8us)
+
+   To decrease the Refresh interval from 7.8us to 3.9us for double rate refresh, write half value of the T_REFI register value.
+   ``` 
+   $ sudo ./pcm-pcicfg -w 0xa4d29248 0 0x7f 0x14 1 0x214
+
+   Intel(r) Performance Counter Monitor ($Format:%ci ID=%h$)
+
+   PCICFG read/write utility
+
+   Writing 0xa4d29248 to 0:0x7f:0x14:0x1@0x214
+   Read value 0xa4d29248 from 0:0x7f:0x14:0x1@0x214
+   ```
+
+
+   
+
+   
   
   
