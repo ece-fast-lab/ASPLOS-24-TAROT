@@ -17,6 +17,7 @@ Generating Random PFN.
    $ numactl --cpunodebind=0 --membind=0 bash run_vtop.sh | grep a_paddr
    // PFN in numanode 1
    $ numactl --cpunodebind=1 --membind=1 bash run_vtop.sh | grep a_paddr
+   ```
 
 # sample result
 
