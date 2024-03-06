@@ -3,7 +3,7 @@ This repository contains artifacts and workflows for reproducing the experiments
 
 # Contents
 1. Reproducing "RH-induced Bit Flips". (related Fig. 4, 5, 6 and 7)
-2. Reproducing "Performance evaluation". (related Table 3, 4, Fig. 10, 14 and 15)
+2. Post data processing.
 
 # Hardware pre-requisities
 Intel(R) Xeon(R) CPU (Code name Haswell or Broadwell)
@@ -87,12 +87,12 @@ Python 3.0+ (Post data process)
    $ sudo ./blacksmith --dimm-id 1 --runtime-limit 259200000 --ranks 2 -a 150
    ```
 
-4) Post data processing.
+# 2. Post data processing.
 
    We provide python code and example result files for post data processing.
    Refer "./1_RH_BIT_FLIP/POST_PROCESSING/README.md"
 
-5) Trouble shooting.
+## Trouble shooting.
 
    - System Crash by UE.
     
