@@ -1,0 +1,4 @@
+sudo dmesg -c
+sudo insmod tarot_mod.ko
+sleep 3
+sudo rmmod tarot_mod.ko

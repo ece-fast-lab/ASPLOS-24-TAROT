@@ -1,0 +1,56 @@
+cd TAROT_4CH_SPLIT_0/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_1/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_2/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_3/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_4/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_5/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_6/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_7/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_8/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_9/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_10/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_11/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_12/
+make clean
+cd ..
+
+cd TAROT_4CH_SPLIT_13/
+make clean
+cd ..
+

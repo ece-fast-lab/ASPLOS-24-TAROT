@@ -1,0 +1,14 @@
+sudo rmmod tarot_mod_0
+sudo rmmod tarot_mod_1
+sudo rmmod tarot_mod_2
+sudo rmmod tarot_mod_3
+sudo rmmod tarot_mod_4
+sudo rmmod tarot_mod_5
+sudo rmmod tarot_mod_6
+sudo rmmod tarot_mod_7
+sudo rmmod tarot_mod_8
+sudo rmmod tarot_mod_9
+sudo rmmod tarot_mod_10
+sudo rmmod tarot_mod_11
+sudo rmmod tarot_mod_12
+sudo rmmod tarot_mod_13
