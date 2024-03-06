@@ -33,6 +33,12 @@ Then, update static_ue.h file for each TAROT module.
    $ source insmod_SPLIT_numa1  // for S-TAROT
    ```
 
+# Check insertd modules
+
+   ```  
+   $ lsmod | grep tarot 
+   ```
+
 # Remove Module
 
    ```  
