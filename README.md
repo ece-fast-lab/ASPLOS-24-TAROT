@@ -16,7 +16,7 @@ For reverse engineering the mapping function of physical memory to DRAM addresse
 
 # Software pre-requisities
 
-g++ >= 8,  cmake (>= 3.14).
+g++ >= 8,  cmake (>= 3.14),
 python (>= 3.0) for Post data process.
 
 # 1. Reproducing "RH-induced Bit Flips".
