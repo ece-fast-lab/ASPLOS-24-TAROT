@@ -16,9 +16,9 @@ Python 3 (pip install pandas)
    ```
   Since RH attack takes long time (a few hours), we provide RH attack error log files with zip file (504 hours, 3 weeks).
   You can get use these sample log to run post process scripts.
-  
-  - unzip Exam_RH*.zip
-
+   ```    
+   $ unzip Exam_RH*.zip
+   ```  
  
 # 2. Run "data_process.sh"
 
