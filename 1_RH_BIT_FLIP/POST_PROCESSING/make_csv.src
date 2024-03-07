@@ -1,0 +1,30 @@
+cat $1 | awk '{print $7}' > print_flip_address # print address
+cat $1 | awk '{print $17}' > print_victim # print # of agg+1, Victim
+cat $1 | awk '{print $19}' > print_rowinc # print row_inc
+cat $1 | awk '{print $21}' > print_distance # print distance
+cat $1 | awk '{print $23}' > print_bank # print bank
+cat $1 | awk '{print $25}' > print_row # print row
+cat $1 | awk '{print $27}' > print_col # print col
+cat $1 | awk '{print $30}' > print_byteoffset # print byteoffset
+cat $1 | awk '{print $32}' > print_expect_value # print expected value
+cat $1 | awk '{print $34}' > print_flip_value # print Flipped value
+cat $1 | awk '{print $37}' > print_hour # print hour
+cat $1 | awk '{print $39}' > print_min # print min
+cat $1 | awk '{print $41}' > print_sec # print sec
+perl -pi -e 's;,;;g' print_*
+
+paste -d "," print_flip_address print_victim print_rowinc print_distance print_bank print_row print_col print_byteoffset print_expect_value print_flip_value print_hour print_min print_sec > result_mod.csv
+rm print_*
+
+sed '1,2d' result_mod.csv > result_mod.csv1
+
+#perl -pi -e 's;,;;g' result_mod.csv1
+
+cat index result_mod.csv1 > result_mod.csv
+rm result_mod.csv1
+
+python3 add_hammering_cnt.py
+
+rm result_mod.csv
+mv cnt_result_mod.csv $1.csv
+
