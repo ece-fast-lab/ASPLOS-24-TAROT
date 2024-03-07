@@ -74,6 +74,28 @@ Python 3.0+ (Post data process)
    $ git apply ../1_RH_BIT_FLIP/RH_ATTACK_PATCH/TAROT_mod.patch
    ```
 
+   - Before you run the RH attack program, update Physical to Dram mapping function and supported_cpus
+
+   ```  
+   $ vi ./src/Memory/DRAMAddr.cpp
+
+   Update "struct MemConfiguration"
+   We updae the mapping function w/ Haswell and Broadwell cpus. We tested on the "E5-2640", "E5-2680"
+   ```
+
+   ```  
+   $ vi ./src/Blacksmith.cpp
+
+   update supported_cpus list
+
+     std::vector<std::string> supported_cpus = {
+         ...
+         "E5-2640",
+         "E5-2680",
+         " your cpu model in "lscpu" "
+     };
+   ```
+   
    - run RH attack program
      
    ```  
