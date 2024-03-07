@@ -16,9 +16,8 @@ For reverse engineering the mapping function of physical memory to DRAM addresse
 
 # Software pre-requisities
 
-git client
-kernel 5 >
-Python 3.0+ (Post data process)
+g++ >= 8,  cmake (>= 3.14).
+python (>= 3.0) for Post data process.
 
 # 1. Reproducing "RH-induced Bit Flips".
 
@@ -74,6 +73,31 @@ Python 3.0+ (Post data process)
    $ git apply ../1_RH_BIT_FLIP/RH_ATTACK_PATCH/TAROT_mod.patch
    ```
 
+
+   - Before you run the RH attack program, update Physical to Dram mapping function and supported_cpus
+
+   ```  
+   $ vi ./src/Memory/DRAMAddr.cpp
+
+   Update "struct MemConfiguration"
+   We updae the mapping function w/ Haswell and Broadwell cpus. We tested on the "E5-2640", "E5-2680"
+   ```
+
+   ```  
+   $ vi ./src/Blacksmith.cpp
+
+   update supported_cpus list
+
+     std::vector<std::string> supported_cpus = {
+         ...
+         "E5-2640",
+         "E5-2680",
+         " your cpu model in "lscpu" "
+     };
+   ```
+  
+  
+   
    - run RH attack program
      
    ```  
@@ -87,12 +111,12 @@ Python 3.0+ (Post data process)
    $ sudo ./blacksmith --dimm-id 1 --runtime-limit 259200000 --ranks 2 -a 150
    ```
 
-4) Post data processing.
+5) Post data processing.
 
    We provide python code and example result files for post data processing.
    Refer "./1_RH_BIT_FLIP/POST_PROCESSING/README.md"
 
-5) Trouble shooting.
+6) Trouble shooting.
 
    - System Crash by UE.
     
