@@ -17,13 +17,12 @@ To disable ECC by modyfing MSR register using PCM, please refer "[2_PERF_EVAL/re
      
 You can find the detailed register addresses for "ECC off" [in the Intel(R) uncore register data sheet.](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/xeon-e5-1600-2600-vol-2-datasheet.pdf) (4.4.4.2 MCMTR:MC Memory Technology)
 
+If the ECC_enable bit is not changable, enable "Disable BIOS Done" in the bios menu (IIO DFX).
 
-# 2. Turn off ECC
 
-   - Refresh rate control
+# 2. Increase Refresh Interval
+
+Since latest DRAMs have in-dram mitigation logic, it is challenging to reproduce bit-flip.
+Modifying REFRESH rate of DRAM helps to generate bit-flip errors.
      
-     Since latest DRAMs have in-dram mitigation logic, it is difficult to reproduce bit-flip.
-     Modifying REFRESH rate of DRAM helps to generate bit-flip errors.
-     
-     Please refer ./1_RH_BIT_FLIP/troubleshoot/README.md
-
+Please refer [2_PERF_EVAL/refreshx2/README.md](https://github.com/chihuns2/ae-asplos2024-TAROT/blob/main/2_PERF_EVAL/refreshx2/README.md).
