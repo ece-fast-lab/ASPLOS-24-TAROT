@@ -6,7 +6,6 @@ This repository contains artifacts and workflows for reproducing the experiments
 2. Increase Refresh Interval
 
 # 1. Turn off ECC
-
      If System ECC is enabled, Correctable Errors are not shown in the log. Also, when Uncorrectable Error is generated, system will be crashed.
      
      1) ECC off in the bios menu.
