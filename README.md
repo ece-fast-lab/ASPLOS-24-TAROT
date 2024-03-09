@@ -135,7 +135,7 @@ python (>= 3.0) for Post data process.
 
 # 2. Reproducing "Performance evaluation".
    
-Please refer [2_PERF_EVAL/README.me](https://github.com/chihuns2/ae-asplos2024-TAROT/blob/main/2_PERF_EVAL/README.md)
+Please refer to [2_PERF_EVAL/README.me](https://github.com/chihuns2/ae-asplos2024-TAROT/blob/main/2_PERF_EVAL/README.md)
 
 
    
