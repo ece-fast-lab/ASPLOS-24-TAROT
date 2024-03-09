@@ -11,4 +11,4 @@ Only S-TAROT needs Dual socket server.
 Please read "README.md" for each Row Hammer mitigation solution.
 
 # Runnig Redis
-We provide Redis run description and script file to sort latency.
+We provide Redis run description and script file to sort latency. Please refer to [./BENCHMARK/README.md](https://github.com/chihuns2/ae-asplos2024-TAROT/blob/main/2_PERF_EVAL/BENCHMARK/README.md).
