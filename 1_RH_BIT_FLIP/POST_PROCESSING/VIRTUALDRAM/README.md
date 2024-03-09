@@ -25,19 +25,20 @@ The script generates new DIMM combination with chip level error information.
      $ source list
      ```
 
-Then you can get number of UE from new virtual modules.
-    ```
-    time_h,CNT_UE_GEN
-    487.0422,0
-    
-    time_h,CNT_UE_GEN
-    483.12918,2
-    
-    time_h,CNT_UE_GEN
-    284.18222,2
-    
-    time_h,CNT_UE_GEN
-    287.1647,3
-    ...
-    ```
+  4. Then you can get the number of UEs for each new virtual module.
+
+     ```
+     time_h,CNT_UE_GEN
+     487.0422,0
+     
+     time_h,CNT_UE_GEN
+     483.12918,2
+     
+     time_h,CNT_UE_GEN
+     284.18222,2
+     
+     time_h,CNT_UE_GEN
+     287.1647,3
+     ...
+     ```
 
