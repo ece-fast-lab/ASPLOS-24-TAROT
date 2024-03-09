@@ -65,16 +65,22 @@ This repository contains artifacts and workflows for reproducing the experiments
   **************
   ...
   ```
-  Then you can find the take-off target QPS (i.e., 75000 )
+  Then you can find the take-off target QPS (i.e., 75000 ops/sec )
 
 # Runing Redis with Target QPS
 
-  run exe_redis.sh with target QPS
+  run exe_redis.sh with target QPS.
+  The script will run from "target qps" to "target qps + 5000" for every 1000 ops/sec
   
   ```
   $ ./exe_redis.sh base 75000 
   // After finishing the benchmark
-  $ ./sort_tail_latency.sh base
+  $ ./sort_tail_latency.sh base 75000
+  $ ./sort_tail_latency.sh base 76000
+  $ ./sort_tail_latency.sh base 77000
+  $ ./sort_tail_latency.sh base 78000
+  $ ./sort_tail_latency.sh base 79000
+  $ ./sort_tail_latency.sh base 80000
   ```
   You can get p99 tail latency results of each workload. This result is baseline for latency overhead.
 
@@ -88,13 +94,23 @@ This repository contains artifacts and workflows for reproducing the experiments
   ```
   $ ./exe_redis.sh cof 75000 
   // After finishing the benchmark
-  $ ./sort_tail_latency.sh cof
+  $ ./sort_tail_latency.sh cof 75000
+  $ ./sort_tail_latency.sh cof 76000
+  $ ./sort_tail_latency.sh cof 77000
+  $ ./sort_tail_latency.sh cof 78000
+  $ ./sort_tail_latency.sh cof 79000
+  $ ./sort_tail_latency.sh cof 80000
   ```
 
   ```
   $ ./exe_redis.sh starot 75000 
   // After finishing the benchmark
-  $ ./sort_tail_latency.sh starot
+  $ ./sort_tail_latency.sh starot 75000
+  $ ./sort_tail_latency.sh starot 76000
+  $ ./sort_tail_latency.sh starot 77000
+  $ ./sort_tail_latency.sh starot 78000
+  $ ./sort_tail_latency.sh starot 79000
+  $ ./sort_tail_latency.sh starot 80000
   ```
 
 
