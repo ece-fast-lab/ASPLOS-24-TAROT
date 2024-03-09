@@ -2,7 +2,7 @@
 This repository contains artifacts and workflows for reproducing the experiments presented in the ASPLOS 2024 paper by C. Song et al.
 
 # Contents
-1. Reproducing "RH-induced Bit Flips". (related Fig. 4, 5, 6 and 7)
+1. Reproducing "RH-induced Bit Flips". (related Fig. 4, 5, 6, 7, 9 and 13)
 2. Reproducing "Performance evaluation". (related Table 3, 4, Fig. 10, 14 and 15)
 
 # Hardware pre-requisities
