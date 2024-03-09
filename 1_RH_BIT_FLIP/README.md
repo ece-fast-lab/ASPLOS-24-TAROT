@@ -4,6 +4,7 @@ This repository contains artifacts and workflows for reproducing the experiments
 # Contents
 1. Reproducing "RH-induced Bit Flips". (related Fig. 4, 5, 6 and 7)
 2. Post data processing.
+3. Bit Error Rate Measurement of ANVIL and TAROT.
 
 # Hardware pre-requisities
 Intel(R) Xeon(R) CPU (Code name Haswell or Broadwell)
@@ -112,6 +113,25 @@ python (>= 3.0) for Post data process.
 
    We provide scripts and example result file for post data processing.
    Refer "./1_RH_BIT_FLIP/POST_PROCESSING/README.md"
+
+
+# 3. Bit Error Rate Measurement of ANVIL and TAROT.
+
+   After running post analysis "UE_OVER_TIME", update the UE PFNs on the RH attack program.
+   
+   ```
+   void TraditionalHammerer::n_sided_hammer(Memory &memory, int acts, long runtime_limit) {
+   ...
+   }
+   ```
+
+   in ./src/Forges/TraditionalHammerer.cpp)
+
+   After than running the modified RH attack program by employing ANVIL and TAROT.
+   You can change the refresh interval of TAROT and monitoring interval of ANVIL at the tarot_mod.h and anvil_mod.h, respectively.
+   Note that you have to update UE-vulnerable PFN into the static_ue.h in one of TAROT split module to refresh target addresses.
+
+   
 
 # Trouble shooting.
 
