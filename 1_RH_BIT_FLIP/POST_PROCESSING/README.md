@@ -12,3 +12,7 @@ Post Data Processing to show error distribution.
 # 3. Variation
 
 Post Data Processing to show bank and chip variation for flipped bits induced by RH attacks.
+
+# 4. VIRTUALDRAM
+
+Generating new module combination with chip error information.
