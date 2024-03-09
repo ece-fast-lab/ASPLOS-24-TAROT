@@ -8,5 +8,7 @@ Reproducing "Performance evaluation". (related Table 3, 4, Fig. 10, 14 and 15)
 Only S-TAROT needs Dual socket server.
 
 # Activating Row Hammer mitigation solutions
-
 Please read "README.md" for each Row Hammer mitigation solution.
+
+# Runnig Redis
+We provide Redis run description and script file to sort latency.
