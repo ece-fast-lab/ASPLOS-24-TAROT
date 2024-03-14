@@ -1,1 +1,1 @@
-numactl --cpunodebind=0 --membind=0 sudo insmod tarot_mod_7.ko
+numactl --physcpubind=7 --membind=0 sudo insmod tarot_mod_7.ko

@@ -1,1 +1,1 @@
-numactl --cpunodebind=0 --membind=0 sudo insmod tarot_mod_8.ko
+numactl --physcpubind=8 --membind=0 sudo insmod tarot_mod_8.ko
