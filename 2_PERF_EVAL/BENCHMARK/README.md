@@ -26,7 +26,7 @@ This repository contains artifacts and workflows for reproducing the experiments
 # Copy workloads and bash files to run
 
   ```
-  $ cp ./worklads ./YCSB/workloads/.
+  $ cp ./worklads/* ./YCSB/workloads/.
   $ cp *.sh ./YCSB
   ```
 
