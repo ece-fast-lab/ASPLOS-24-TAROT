@@ -20,9 +20,15 @@ After running ["1_RH_BIT_FLIP/POST_PROCESSING/UE_OVER_TIME"](https://github.com/
 
    ```
    For X8 DRAM
-   $ python3 ./variation_DRAMx8.py "csv file"
+   $ python3 ./variation_DRAMx8.py "csv file" > out.lis
 
    For X4 DRAM
-   $ python3 ./variation_DRAMx4.py "csv file"
+   $ python3 ./variation_DRAMx4.py "csv file" > out.lis
+   ```
+
+# 3. Plot figure
+
+   ```
+   $ python3 figure5_a.py out.lis
    ```
 
