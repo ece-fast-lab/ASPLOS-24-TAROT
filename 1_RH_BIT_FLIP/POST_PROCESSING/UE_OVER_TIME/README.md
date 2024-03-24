@@ -116,3 +116,18 @@ Python 3 (pip install pandas)
     Uncorrestable Error list over time w/ patrol scrub (24 hours): ./result/Exam_RH_504h.lis0.csv.ue_scrub.lis
 
    ```
+
+
+# 3. Plot figures with output result.
+
+   ```  
+   $ python3 figure6.py <file name> <end of time_in_hours> <output_file>
+   ```
+
+  For example,
+
+  
+   ```  
+   $ python3 result/Exam_RH_504h.lis0.csv.ue_scrub.lis 504 plot_rh_review.png 
+
+   ```
