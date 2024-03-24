@@ -22,7 +22,7 @@ The script generates new DIMM combination with chip level error information.
      $ cd output
      $ ls *.csv > list
      $ perl -pi -e 's;^;python3 ../print_ue.py ;g' list
-     $ source list
+     $ source list > result.out
      ```
 
   4. Then you can get the number of UEs for each new virtual module.
@@ -42,3 +42,9 @@ The script generates new DIMM combination with chip level error information.
      ...
      ```
 
+  5. Plot figure.
+
+     ```
+     $ cd ..
+     $ python3 figure7.py ./output/result.out  
+     ```
