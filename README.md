@@ -1,6 +1,8 @@
 # Artifact Evaluation for "TAROT:A CXL SmartNIC-Based Defense Against Multi-bit Errors by Row Hammers Attacks", ASPLOS 2024.
 This repository contains artifacts and workflows for reproducing the experiments presented in the ASPLOS 2024 paper by C. Song et al.
 
+[![DOI](https://zenodo.org/badge/767037552.svg)](https://zenodo.org/doi/10.5281/zenodo.10867231)
+
 # Contents
 1. Reproducing "RH-induced Bit Flips". (related Fig. 4, 5, 6, 7, 9 and 13)
 2. Reproducing "Performance evaluation". (related Table 3, 4, Fig. 10, 14 and 15)
