@@ -23,7 +23,7 @@ Python 3 (pip install pandas)
 # 2. Run "data_process.sh"
 
    ```  
-   $ ./data_proess.sh rh_error.lis
+   $ ./data_proess.sh rh_error.lis <end of time in hours>
    ```
 
   You can check the result in the "./result" directory.
@@ -31,7 +31,7 @@ Python 3 (pip install pandas)
   This is example output of "./data_process.sh Exam_EH_504h.lis0"
 
    ```  
-   $ ./data_proess.sh Exam_EH_504h.lis0
+   $ ./data_proess.sh Exam_EH_504h.lis0 504
    ```
 
    ```  
@@ -118,16 +118,4 @@ Python 3 (pip install pandas)
    ```
 
 
-# 3. Plot figures with output result.
-
-   ```  
-   $ python3 figure6.py <file name> <end of time_in_hours> <output_file>
-   ```
-
-  For example,
-
-  
-   ```  
-   $ python3 result/Exam_RH_504h.lis0.csv.ue_scrub.lis 504 plot_rh_review.png 
-
-   ```
+# 3. Plot figures with output result. : figure6.png
