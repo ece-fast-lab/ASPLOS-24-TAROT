@@ -20,7 +20,7 @@ def plot_histogram_all_values(file_name):
     plt.grid(axis='y', alpha=0.75)
     
     # Save the figure to a PNG file
-    output_file_name = "histogram_all_values.png"
+    output_file_name = "figure_7.png"
     plt.savefig(output_file_name)
     print(f"Figure saved to {output_file_name}")
     plt.show()
