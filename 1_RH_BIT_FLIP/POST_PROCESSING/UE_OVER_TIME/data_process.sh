@@ -4,11 +4,11 @@ echo -e "RH Data Processing for The number of UE addresses over time."
 echo -e "****************************************************************\n"
 
 # Correctly set the number of expected arguments
-EXPECTED_NUM_ARGS=1
+EXPECTED_NUM_ARGS=2
 
 if [ $# -ne $EXPECTED_NUM_ARGS ]; then
     # Correct the usage message
-    echo -e "Usage: $0 input.csv\n"
+    echo -e "Usage: $0 input.lis end_of_time(h)\n"
     echo -e "Please check command.\n"
     exit 1
 fi
@@ -115,3 +115,5 @@ echo -e "Post Data Processing Result"
 echo -e "*******************************************************\n"
 echo -e "Uncorrestable Error list over time w/o patrol scrub: ./result/$1.csv.ue.lis"
 echo -e "Uncorrestable Error list over time w/ patrol scrub (24 hours): ./result/$1.csv.ue_scrub.lis"
+
+python3 figure6.py $1 $2 > figure6.png
