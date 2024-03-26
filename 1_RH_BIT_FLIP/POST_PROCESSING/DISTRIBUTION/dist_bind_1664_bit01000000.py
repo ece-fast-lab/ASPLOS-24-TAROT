@@ -148,7 +148,7 @@ if __name__ == "__main__":
 #    fig0.update_layout(coloraxis_colorbar=colorbar)
 
     #fig0.show()
-    fig0.write_image("dist.png")
+    fig0.write_image("figure_6.png")
 #
 #
 #    fig1 = pgo.Figure(pgo.Histogram2d(x=x_b0_byte,y=y_b0_byte,

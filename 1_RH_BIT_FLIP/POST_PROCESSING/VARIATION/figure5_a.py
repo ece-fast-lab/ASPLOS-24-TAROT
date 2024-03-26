@@ -37,7 +37,7 @@ def plot_error_distribution(df, output_file):
     plt.ylabel('Number of Errors')
     plt.xticks(rotation=90)
     plt.tight_layout()
-    plt.savefig(output_file + '_error_distribution.png')
+    plt.savefig('figure_5.png')
     plt.close()
 
 

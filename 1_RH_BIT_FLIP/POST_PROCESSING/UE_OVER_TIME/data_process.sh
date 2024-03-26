@@ -116,4 +116,4 @@ echo -e "*******************************************************\n"
 echo -e "Uncorrestable Error list over time w/o patrol scrub: ./result/$1.csv.ue.lis"
 echo -e "Uncorrestable Error list over time w/ patrol scrub (24 hours): ./result/$1.csv.ue_scrub.lis"
 
-python3 figure6.py $1 $2 > figure6.png
+python3 figure6.py $1 $2 > figure_6.png
